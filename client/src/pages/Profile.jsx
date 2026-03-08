@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   User,
   Settings,
@@ -14,6 +14,7 @@ import {
   Heart,
   Camera,
 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 const menuItems = [
   { icon: User, label: "Edit Profile", desc: "Update your personal info" },
@@ -26,13 +27,35 @@ const menuItems = [
 ];
 
 const stats = [
-  { label: "Visits", value: "47", icon: MapPin },
-  { label: "Reviews", value: "12", icon: Star },
-  { label: "Favorites", value: "8", icon: Heart },
+  { label: "Visits", value: "visits", icon: MapPin },
+  { label: "Reviews", value: "reviews", icon: Star },
+  { label: "Favorites", value: "favorites", icon: Heart },
 ];
 
 export default function Profile() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  // Get user initials
+  const getInitials = (name) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24 md:pb-8">
@@ -49,8 +72,8 @@ export default function Profile() {
           <div className="flex flex-col sm:flex-row items-center gap-5">
             {/* Avatar */}
             <div className="relative group">
-              <div className="w-24 h-24 rounded-2xl bg-linear-to-br from-primary/30 to-primary/10 flex items-center justify-center text-3xl font-bold text-primary border-2 border-primary/30">
-                J
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-3xl font-bold text-primary border-2 border-primary/30">
+                {user ? getInitials(user.name) : 'U'}
               </div>
               <button className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                 <Camera className="w-4 h-4 text-black" />
@@ -58,9 +81,15 @@ export default function Profile() {
             </div>
 
             <div className="text-center sm:text-left flex-1">
-              <h1 className="text-2xl font-bold text-white">John Doe</h1>
-              <p className="text-gray-500 text-sm mt-0.5">john.doe@example.com</p>
-              <p className="text-gray-600 text-xs mt-1">Member since Jan 2025</p>
+              <h1 className="text-2xl font-bold text-white">
+                {user?.name || 'User'}
+              </h1>
+              <p className="text-gray-500 text-sm mt-0.5">
+                {user?.email || 'user@example.com'}
+              </p>
+              <p className="text-gray-600 text-xs mt-1">
+                Member since {user?.createdAt ? formatDate(user.createdAt) : 'Jan 2025'}
+              </p>
             </div>
 
             <motion.button
@@ -75,6 +104,7 @@ export default function Profile() {
           <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-dark-border">
             {stats.map((stat, i) => {
               const Icon = stat.icon;
+              const value = user?.[stat.value] || 0;
               return (
                 <motion.div
                   key={stat.label}
@@ -85,7 +115,7 @@ export default function Profile() {
                 >
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <Icon className="w-4 h-4 text-primary" />
-                    <span className="text-xl font-bold text-white">{stat.value}</span>
+                    <span className="text-xl font-bold text-white">{value}</span>
                   </div>
                   <p className="text-xs text-gray-500">{stat.label}</p>
                 </motion.div>
@@ -132,7 +162,7 @@ export default function Profile() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => navigate("/login")}
+          onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-medium text-sm hover:bg-red-500/20 transition-colors"
         >
           <LogOut className="w-5 h-5" />

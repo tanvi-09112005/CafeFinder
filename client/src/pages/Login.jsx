@@ -1,19 +1,35 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Coffee, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Coffee, Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext"; // Add this import
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  
   const navigate = useNavigate();
+  const { login } = useAuth(); // This will work now
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Just UI — navigate to home
-    navigate("/");
+    setError("");
+    setLoading(true);
+
+    try {
+      await login(email, password);
+      navigate("/");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // ... rest of your component remains the same
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden bg-dark-bg">
@@ -58,6 +74,18 @@ export default function Login() {
           <h2 className="text-2xl font-bold text-white mb-1">Welcome back</h2>
           <p className="text-gray-500 text-sm mb-8">Sign in to continue your coffee journey</p>
 
+          {/* Error message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3"
+            >
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-400">{error}</p>
+            </motion.div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div>
@@ -71,6 +99,7 @@ export default function Login() {
                   placeholder="hello@example.com"
                   className="w-full pl-12 pr-4 py-3 rounded-xl bg-dark-surface border border-dark-border text-white placeholder-gray-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all text-sm"
                   required
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -87,32 +116,35 @@ export default function Login() {
                   placeholder="••••••••"
                   className="w-full pl-12 pr-12 py-3 rounded-xl bg-dark-surface border border-dark-border text-white placeholder-gray-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all text-sm"
                   required
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  disabled={loading}
                 >
                   {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            {/* Forgot password */}
-            <div className="flex justify-end">
-              <button type="button" className="text-xs text-primary hover:text-primary-light transition-colors">
-                Forgot password?
-              </button>
-            </div>
-
             {/* Submit */}
             <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: loading ? 1 : 1.01 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
-              className="w-full py-3.5 rounded-xl bg-primary text-black font-semibold text-sm hover:bg-primary-light transition-colors"
+              disabled={loading}
+              className="w-full py-3.5 rounded-xl bg-primary text-black font-semibold text-sm hover:bg-primary-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Sign In
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </motion.button>
           </form>
 

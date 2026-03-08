@@ -8,28 +8,88 @@ import {
   Phone,
   Heart,
   Share2,
-  Wifi,
-  PawPrint,
-  Sun,
   Navigation,
+  Loader2,
 } from "lucide-react";
-import { cafes } from "../data/cafes";
-import { useState } from "react";
-
-const tagIcons = {
-  "Wi-Fi": Wifi,
-  "Pet Friendly": PawPrint,
-  "Outdoor Seating": Sun,
-};
+import { useState, useEffect } from "react";
 
 export default function CafeDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const cafe = cafes.find((c) => c.id === Number(id));
+  const [cafe, setCafe] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("menu");
 
-  if (!cafe) {
+  useEffect(() => {
+    fetchCafeDetails();
+  }, [id]);
+
+  const fetchCafeDetails = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/cafes/${id}`);
+      
+      if (!response.ok) {
+        throw new Error("Cafe not found");
+      }
+
+      const data = await response.json();
+      setCafe(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetDirections = () => {
+    if (!cafe) return;
+    
+    const [lon, lat] = cafe.location.coordinates;
+    
+    // Open Google Maps in new tab (free to use)
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+    window.open(googleMapsUrl, '_blank');
+  };
+
+  const handleCallNow = () => {
+    if (cafe?.phone) {
+      window.location.href = `tel:${cafe.phone}`;
+    }
+  };
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: cafe.name,
+          text: `Check out ${cafe.name}!`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.log('Share cancelled');
+      }
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(window.location.href);
+      alert('Link copied to clipboard!');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Loading cafe details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !cafe) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
         <div className="text-center">
@@ -42,6 +102,8 @@ export default function CafeDetail() {
     );
   }
 
+  const mainPhoto = cafe.photos?.[0] || "https://images.unsplash.com/photo-1554118811-1e0d58224f24";
+
   return (
     <div className="min-h-screen bg-dark-bg pb-24 md:pb-8">
       {/* Hero Image */}
@@ -50,11 +112,11 @@ export default function CafeDetail() {
           initial={{ scale: 1.1 }}
           animate={{ scale: 1 }}
           transition={{ duration: 0.8 }}
-          src={cafe.image}
+          src={mainPhoto}
           alt={cafe.name}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-linear-to-t from-dark-bg via-dark-bg/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-dark-bg via-dark-bg/40 to-transparent" />
 
         {/* Top buttons */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
@@ -71,7 +133,10 @@ export default function CafeDetail() {
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-2"
           >
-            <button className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center hover:bg-black/60 transition-colors">
+            <button 
+              onClick={handleShare}
+              className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center hover:bg-black/60 transition-colors"
+            >
               <Share2 className="w-5 h-5 text-white" />
             </button>
             <button
@@ -89,7 +154,7 @@ export default function CafeDetail() {
 
         {/* Price badge */}
         <div className="absolute bottom-20 left-6 px-3 py-1.5 rounded-lg bg-primary/90 text-black text-sm font-bold">
-          {cafe.price}
+          {cafe.price || "$$"}
         </div>
       </div>
 
@@ -101,35 +166,43 @@ export default function CafeDetail() {
           transition={{ duration: 0.5 }}
           className="glass rounded-3xl p-6 mb-6"
         >
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">{cafe.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+            {cafe.name}
+          </h1>
 
           <div className="flex flex-wrap items-center gap-4 mb-4">
             <div className="flex items-center gap-1.5">
               <Star className="w-5 h-5 text-primary fill-primary" />
-              <span className="font-semibold text-white">{cafe.rating}</span>
+              <span className="font-semibold text-white">{cafe.rating?.toFixed(1) || "4.5"}</span>
               <span className="text-gray-500 text-sm">
-                ({cafe.reviews.toLocaleString()} reviews)
+                ({cafe.reviewCount?.toLocaleString() || "0"} reviews)
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-gray-400 text-sm">
-              <MapPin className="w-4 h-4" />
-              {cafe.distance} Away
-            </div>
+            {cafe.distance && (
+              <div className="flex items-center gap-1.5 text-gray-400 text-sm">
+                <MapPin className="w-4 h-4" />
+                {cafe.distance} Away
+              </div>
+            )}
           </div>
 
-          <p className="text-gray-400 text-sm leading-relaxed mb-5">{cafe.description}</p>
+          <p className="text-gray-400 text-sm leading-relaxed mb-5">
+            {cafe.description || "A wonderful cafe in your area."}
+          </p>
 
           {/* Tags */}
-          <div className="flex flex-wrap gap-2 mb-5">
-            {cafe.tags.map((tag) => (
-              <span
-                key={tag}
-                className="px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+          {cafe.tags && cafe.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-5">
+              {cafe.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Info grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -139,7 +212,7 @@ export default function CafeDetail() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Address</p>
-                <p className="text-sm text-white">{cafe.address}</p>
+                <p className="text-sm text-white">{cafe.address || "N/A"}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 rounded-xl bg-dark-surface">
@@ -148,7 +221,7 @@ export default function CafeDetail() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Hours</p>
-                <p className="text-sm text-white">{cafe.hours}</p>
+                <p className="text-sm text-white">{cafe.hours || "8AM - 8PM"}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 rounded-xl bg-dark-surface">
@@ -157,7 +230,7 @@ export default function CafeDetail() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Phone</p>
-                <p className="text-sm text-white">{cafe.phone}</p>
+                <p className="text-sm text-white">{cafe.phone || "N/A"}</p>
               </div>
             </div>
           </div>
@@ -188,7 +261,7 @@ export default function CafeDetail() {
         </motion.div>
 
         {/* Tab content */}
-        {activeTab === "menu" && (
+        {activeTab === "menu" && cafe.menu && cafe.menu.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -197,7 +270,7 @@ export default function CafeDetail() {
           >
             {cafe.menu.map((item, i) => (
               <motion.div
-                key={item.name}
+                key={i}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: i * 0.08 }}
@@ -210,31 +283,23 @@ export default function CafeDetail() {
                 />
                 <div className="flex-1">
                   <h4 className="font-medium text-white text-sm">{item.name}</h4>
-                  <p className="text-primary font-bold mt-1">${item.price.toFixed(2)}</p>
+                  <p className="text-primary font-bold mt-1">
+                    ${item.price?.toFixed(2) || "0.00"}
+                  </p>
                 </div>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors"
-                >
-                  <span className="text-primary text-lg">+</span>
-                </motion.button>
               </motion.div>
             ))}
           </motion.div>
         )}
 
-        {activeTab === "reviews" && (
+        {activeTab === "reviews" && cafe.reviews && cafe.reviews.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
             className="space-y-4 mb-8"
           >
-            {[
-              { name: "Sarah M.", rating: 5, text: "Absolutely love this place! The coffee is always perfect and the ambiance is unmatched. My go-to spot for weekend mornings.", date: "2 days ago" },
-              { name: "Alex K.", rating: 4, text: "Great selection of pastries and friendly staff. The only downside is it gets crowded on weekends.", date: "1 week ago" },
-              { name: "Jamie L.", rating: 5, text: "Best matcha latte in town! The interior design is stunning too. Highly recommend for anyone who appreciates good coffee.", date: "2 weeks ago" },
-            ].map((review, i) => (
+            {cafe.reviews.map((review, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 15 }}
@@ -245,11 +310,13 @@ export default function CafeDetail() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                      {review.name[0]}
+                      {review.author?.[0] || "?"}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-white">{review.name}</p>
-                      <p className="text-xs text-gray-500">{review.date}</p>
+                      <p className="text-sm font-medium text-white">
+                        {review.author || "Anonymous"}
+                      </p>
+                      <p className="text-xs text-gray-500">{review.date || "Recently"}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5">
@@ -257,7 +324,7 @@ export default function CafeDetail() {
                       <Star
                         key={j}
                         className={`w-3.5 h-3.5 ${
-                          j < review.rating
+                          j < (review.rating || 5)
                             ? "text-primary fill-primary"
                             : "text-gray-600"
                         }`}
@@ -265,20 +332,22 @@ export default function CafeDetail() {
                     ))}
                   </div>
                 </div>
-                <p className="text-sm text-gray-400 leading-relaxed">{review.text}</p>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  {review.text || "Great place!"}
+                </p>
               </motion.div>
             ))}
           </motion.div>
         )}
 
-        {activeTab === "photos" && (
+        {activeTab === "photos" && cafe.photos && cafe.photos.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
             className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8"
           >
-            {[cafe.image, ...cafe.menu.map((m) => m.image)].map((img, i) => (
+            {cafe.photos.map((img, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -306,6 +375,7 @@ export default function CafeDetail() {
           <div className="max-w-4xl mx-auto flex gap-3">
             <motion.button
               whileTap={{ scale: 0.95 }}
+              onClick={handleGetDirections}
               className="flex-1 md:flex-none md:px-8 py-3.5 rounded-2xl bg-primary text-black font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary-light transition-colors"
             >
               <Navigation className="w-4 h-4" />
@@ -313,6 +383,7 @@ export default function CafeDetail() {
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
+              onClick={handleCallNow}
               className="flex-1 md:flex-none md:px-8 py-3.5 rounded-2xl glass text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
             >
               <Phone className="w-4 h-4" />
