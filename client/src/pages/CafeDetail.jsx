@@ -21,6 +21,7 @@ export default function CafeDetail() {
   const [error, setError] = useState(null);
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("menu");
+  const [callStatus, setCallStatus] = useState({ show: false, message: '' });
 
   useEffect(() => {
     fetchCafeDetails();
@@ -49,14 +50,53 @@ export default function CafeDetail() {
     
     const [lon, lat] = cafe.location.coordinates;
     
-    // Open Google Maps in new tab (free to use)
+    // Open Google Maps in new tab
     const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
     window.open(googleMapsUrl, '_blank');
   };
 
   const handleCallNow = () => {
-    if (cafe?.phone) {
-      window.location.href = `tel:${cafe.phone}`;
+    if (!cafe?.phone) {
+      setCallStatus({ 
+        show: true, 
+        message: 'No phone number available for this cafe' 
+      });
+      setTimeout(() => setCallStatus({ show: false, message: '' }), 3000);
+      return;
+    }
+
+    // Clean the phone number (remove spaces, dashes, etc)
+    let phoneNumber = cafe.phone.replace(/[\s\-\(\)]/g, '');
+    
+    // Add + if it's international format and not already there
+    if (phoneNumber.startsWith('+')) {
+      // Keep as is
+    } else if (phoneNumber.startsWith('00')) {
+      // Convert 00 to + (common international prefix)
+      phoneNumber = '+' + phoneNumber.substring(2);
+    } else if (phoneNumber.length === 10) {
+      // Assume Indian number, add +91
+      phoneNumber = '+91' + phoneNumber;
+    }
+
+    console.log('Calling:', phoneNumber); // Debug log
+    
+    try {
+      window.location.href = `tel:${phoneNumber}`;
+      
+      // Show success message
+      setCallStatus({ 
+        show: true, 
+        message: `Calling ${cafe.phone}...` 
+      });
+      setTimeout(() => setCallStatus({ show: false, message: '' }), 2000);
+    } catch (err) {
+      console.error('Call failed:', err);
+      setCallStatus({ 
+        show: true, 
+        message: 'Could not initiate call' 
+      });
+      setTimeout(() => setCallStatus({ show: false, message: '' }), 3000);
     }
   };
 
@@ -102,10 +142,22 @@ export default function CafeDetail() {
     );
   }
 
-  const mainPhoto = cafe.photos?.[0] || "https://images.unsplash.com/photo-1554118811-1e0d58224f24";
+  const mainPhoto = cafe.photos?.[0] || "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24 md:pb-8">
+      {/* Call Status Toast */}
+      {callStatus.show && (
+        <motion.div
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-dark-card border border-primary/20 text-white px-4 py-2 rounded-xl shadow-lg"
+        >
+          {callStatus.message}
+        </motion.div>
+      )}
+
       {/* Hero Image */}
       <div className="relative h-64 sm:h-80 lg:h-96">
         <motion.img
@@ -115,6 +167,9 @@ export default function CafeDetail() {
           src={mainPhoto}
           alt={cafe.name}
           className="w-full h-full object-cover"
+          onError={(e) => {
+            e.target.src = "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-dark-bg via-dark-bg/40 to-transparent" />
 
@@ -221,16 +276,27 @@ export default function CafeDetail() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Hours</p>
-                <p className="text-sm text-white">{cafe.hours || "8AM - 8PM"}</p>
+                <p className="text-sm text-white">{cafe.openingHours || "8AM - 8PM"}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-dark-surface">
+            <div 
+              className={`flex items-center gap-3 p-3 rounded-xl bg-dark-surface ${
+                cafe.phone && cafe.phone !== "Not available" ? 'cursor-pointer hover:bg-primary/10 transition-colors' : ''
+              }`}
+              onClick={() => {
+                if (cafe.phone && cafe.phone !== "Not available") {
+                  handleCallNow();
+                }
+              }}
+            >
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Phone className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <p className="text-xs text-gray-500">Phone</p>
-                <p className="text-sm text-white">{cafe.phone || "N/A"}</p>
+                <p className="text-sm text-white">
+                  {cafe.phone && cafe.phone !== "Not available" ? cafe.phone : "N/A"}
+                </p>
               </div>
             </div>
           </div>
@@ -280,6 +346,9 @@ export default function CafeDetail() {
                   src={item.image}
                   alt={item.name}
                   className="w-16 h-16 rounded-xl object-cover group-hover:scale-105 transition-transform"
+                  onError={(e) => {
+                    e.target.src = "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg";
+                  }}
                 />
                 <div className="flex-1">
                   <h4 className="font-medium text-white text-sm">{item.name}</h4>
@@ -357,8 +426,11 @@ export default function CafeDetail() {
               >
                 <img
                   src={img}
-                  alt=""
+                  alt={`${cafe.name} ${i + 1}`}
                   className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                  onError={(e) => {
+                    e.target.src = "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
+                  }}
                 />
               </motion.div>
             ))}
@@ -384,7 +456,10 @@ export default function CafeDetail() {
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={handleCallNow}
-              className="flex-1 md:flex-none md:px-8 py-3.5 rounded-2xl glass text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
+              className={`flex-1 md:flex-none md:px-8 py-3.5 rounded-2xl glass text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-white/10 transition-colors ${
+                !cafe.phone || cafe.phone === "Not available" ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={!cafe.phone || cafe.phone === "Not available"}
             >
               <Phone className="w-4 h-4" />
               Call Now
