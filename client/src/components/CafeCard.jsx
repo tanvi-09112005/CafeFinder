@@ -2,19 +2,18 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Star, MapPin, Heart, Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
+import { useFavorites } from "../contexts/FavoritesContext";
 
 export default function CafeCard({ cafe, index = 0, variant = "default" }) {
-  const [liked, setLiked] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const { toggleFavorite, isFavorite } = useFavorites();
 
   const isCompact = variant === "compact";
 
-  // Provide default values for all properties
   const cafeData = {
     id: cafe?._id || cafe?.id || index,
     name: cafe?.name || "Local Cafe",
-    // Use multiple fallback images
-    image: !imageError 
+    image: !imageError
       ? (cafe?.photo || cafe?.photos?.[0] || getRandomCafeImage(index))
       : getRandomCafeImage(index),
     price: cafe?.price || "$$",
@@ -24,20 +23,19 @@ export default function CafeCard({ cafe, index = 0, variant = "default" }) {
     cuisine: cafe?.cuisine || "Coffee"
   };
 
-  // Function to get random cafe images from reliable sources
+  const liked = isFavorite(cafeData.id);
+
   function getRandomCafeImage(seed) {
     const images = [
-      "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg", // Coffee shop
-      "https://images.pexels.com/photos/260922/pexels-photo-260922.jpeg", // Cafe interior
-      "https://images.pexels.com/photos/2347311/pexels-photo-2347311.jpeg", // Coffee cup
-      "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg", // Espresso
-      "https://images.pexels.com/photos/461064/pexels-photo-461064.jpeg", // Latte art
-      "https://images.pexels.com/photos/312418/pexels-photo-312418.jpeg", // Bakery
-      "https://images.pexels.com/photos/757520/pexels-photo-757520.jpeg", // Coffee beans
-      "https://images.pexels.com/photos/29951/pexels-photo-29951.jpg", // Cappuccino
+      "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg",
+      "https://images.pexels.com/photos/260922/pexels-photo-260922.jpeg",
+      "https://images.pexels.com/photos/2347311/pexels-photo-2347311.jpeg",
+      "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg",
+      "https://images.pexels.com/photos/461064/pexels-photo-461064.jpeg",
+      "https://images.pexels.com/photos/312418/pexels-photo-312418.jpeg",
+      "https://images.pexels.com/photos/757520/pexels-photo-757520.jpeg",
+      "https://images.pexels.com/photos/29951/pexels-photo-29951.jpg",
     ];
-    
-    // Use the seed to pick a consistent image for each cafe
     const imageIndex = (seed || Math.floor(Math.random() * images.length)) % images.length;
     return images[imageIndex];
   }
@@ -75,7 +73,7 @@ export default function CafeCard({ cafe, index = 0, variant = "default" }) {
             {cafeData.price}
           </div>
 
-          {/* Cuisine badge if available */}
+          {/* Cuisine badge */}
           {cafeData.cuisine && (
             <div className="absolute top-3 right-3 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white border border-white/10">
               {cafeData.cuisine}
@@ -110,7 +108,7 @@ export default function CafeCard({ cafe, index = 0, variant = "default" }) {
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setLiked(!liked);
+          toggleFavorite({ ...cafe, _id: cafeData.id });
         }}
         className="absolute top-3 right-12 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-colors"
       >

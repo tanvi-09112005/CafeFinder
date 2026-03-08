@@ -1,17 +1,10 @@
-import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Trash2 } from "lucide-react";
 import CafeCard from "../components/CafeCard";
-import { cafes } from "../data/cafes";
+import { useFavorites } from "../contexts/FavoritesContext";
 
 export default function Favorites() {
-  // Simulate some favorites
-  const [favoriteIds, setFavoriteIds] = useState([1, 3, 5, 8]);
-  const favoriteCafes = cafes.filter((c) => favoriteIds.includes(c.id));
-
-  const removeFavorite = (id) => {
-    setFavoriteIds((prev) => prev.filter((fid) => fid !== id));
-  };
+  const { favorites, toggleFavorite } = useFavorites();
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24 md:pb-8">
@@ -29,11 +22,11 @@ export default function Favorites() {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Favorites</h1>
           </div>
           <p className="text-gray-500 text-sm">
-            {favoriteCafes.length} cafe{favoriteCafes.length !== 1 ? "s" : ""} saved
+            {favorites.length} cafe{favorites.length !== 1 ? "s" : ""} saved
           </p>
         </motion.div>
 
-        {favoriteCafes.length === 0 ? (
+        {favorites.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -50,16 +43,16 @@ export default function Favorites() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             <AnimatePresence mode="popLayout">
-              {favoriteCafes.map((cafe, i) => (
+              {favorites.map((cafe, i) => (
                 <motion.div
-                  key={cafe.id}
+                  key={cafe._id}
                   layout
                   exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.3 } }}
                   className="relative group"
                 >
                   <CafeCard cafe={cafe} index={i} />
                   <button
-                    onClick={() => removeFavorite(cafe.id)}
+                    onClick={() => toggleFavorite(cafe)}
                     className="absolute top-3 right-3 w-8 h-8 rounded-full bg-red-500/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                   >
                     <Trash2 className="w-4 h-4 text-white" />
