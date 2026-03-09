@@ -70,8 +70,8 @@ mongoose.connection.once("open", async () => {
 const dealSchema = new mongoose.Schema({
   title: String,
   description: String,
-  discount: String,       // plain number string e.g. "50"
-  discountLabel: String,  // display label e.g. "50% OFF" or "Free Cookie"
+  discount: String,
+  discountLabel: String,
   code: String,
   validUntil: String,
   image: String,
@@ -89,15 +89,14 @@ dealSchema.index({ location: "2dsphere" });
 const Deal = mongoose.model("Deal", dealSchema);
 
 /* ==============================
-   Redemption Schema — tracks which user claimed which deal
+   Redemption Schema
 ============================== */
 const redemptionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   dealId: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", required: true },
   claimedAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, required: true }  // claimedAt + 3 minutes
+  expiresAt: { type: Date, required: true }
 });
-// Unique index: one redemption per user per deal
 redemptionSchema.index({ userId: 1, dealId: 1 }, { unique: true });
 const Redemption = mongoose.model("Redemption", redemptionSchema);
 
@@ -108,7 +107,100 @@ mongoose.connection.once("open", async () => {
 });
 
 /* ==============================
-   Seed Deals — run once via POST /api/deals/seed
+   Favorite Schema
+   Stores user details + cafe details together
+============================== */
+const favoriteSchema = new mongoose.Schema({
+  user: {
+    id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true }
+  },
+  cafe: {
+    id: { type: mongoose.Schema.Types.ObjectId, ref: "Cafe", required: true },
+    name: { type: String, required: true },
+    address: { type: String },
+    photo: { type: String },
+    cuisine: { type: String },
+    rating: { type: Number },
+    distance: { type: String }
+  },
+  savedAt: { type: Date, default: Date.now }
+});
+// One favorite per user per cafe
+favoriteSchema.index({ "user.id": 1, "cafe.id": 1 }, { unique: true });
+const Favorite = mongoose.model("Favorite", favoriteSchema);
+
+mongoose.connection.once("open", async () => {
+  await Favorite.syncIndexes();
+  console.log("❤️ Favorites Index Synced");
+});
+
+/* ==============================
+   POST /api/favorites/toggle
+   Add or remove a favorite
+============================== */
+app.post("/api/favorites/toggle", async (req, res) => {
+  try {
+    const { userId, userName, userEmail, cafe } = req.body;
+    if (!userId || !cafe?.id) return res.status(400).json({ error: "userId and cafe.id required" });
+
+    const existing = await Favorite.findOne({ "user.id": userId, "cafe.id": cafe.id });
+
+    if (existing) {
+      await Favorite.deleteOne({ _id: existing._id });
+      return res.json({ favorited: false, message: "Removed from favorites" });
+    }
+
+    await Favorite.create({
+      user: { id: userId, name: userName, email: userEmail },
+      cafe: {
+        id: cafe.id,
+        name: cafe.name,
+        address: cafe.address,
+        photo: cafe.photo,
+        cuisine: cafe.cuisine,
+        rating: cafe.rating,
+        distance: cafe.distance
+      }
+    });
+
+    res.json({ favorited: true, message: "Added to favorites" });
+  } catch (err) {
+    console.error("❌ Toggle favorite error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==============================
+   GET /api/favorites/:userId
+   Get all favorites for a user
+============================== */
+app.get("/api/favorites/:userId", async (req, res) => {
+  try {
+    const favorites = await Favorite.find({ "user.id": req.params.userId }).sort({ savedAt: -1 });
+    res.json(favorites);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==============================
+   GET /api/favorites/:userId/ids
+   Get just cafe IDs favorited by a user (for heart icon state)
+============================== */
+app.get("/api/favorites/:userId/ids", async (req, res) => {
+  try {
+    const favorites = await Favorite.find({ "user.id": req.params.userId }).select("cafe.id");
+    const ids = favorites.map(f => f.cafe.id.toString());
+    res.json(ids);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ==============================
+   Seed Deals
 ============================== */
 app.post("/api/deals/seed", async (req, res) => {
   try {
@@ -188,17 +280,14 @@ app.post("/api/deals/seed", async (req, res) => {
       }
     ];
     await Deal.insertMany(sampleDeals);
-    console.log(`✅ Seeded ${sampleDeals.length} deals`);
     res.json({ message: "✅ Deals seeded!", count: sampleDeals.length });
   } catch (err) {
-    console.error("❌ Seed error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 /* ==============================
    GET /api/deals/nearby
-   Returns deals sorted by score, with claimed status per user
 ============================== */
 app.get("/api/deals/nearby", async (req, res) => {
   try {
@@ -213,23 +302,19 @@ app.get("/api/deals/nearby", async (req, res) => {
       location: {
         $near: {
           $geometry: { type: "Point", coordinates: [userLon, userLat] },
-          $maxDistance: 100000 // 100km — covers whole city
+          $maxDistance: 100000
         }
       }
     }).limit(20);
 
-    // Fetch this user's redemptions if logged in
     let claimedDealIds = new Set();
-    let redemptionMap = {}; // dealId -> { claimedAt, expiresAt }
+    let redemptionMap = {};
 
     if (userId) {
       const redemptions = await Redemption.find({ userId });
       redemptions.forEach(r => {
         claimedDealIds.add(r.dealId.toString());
-        redemptionMap[r.dealId.toString()] = {
-          claimedAt: r.claimedAt,
-          expiresAt: r.expiresAt
-        };
+        redemptionMap[r.dealId.toString()] = { claimedAt: r.claimedAt, expiresAt: r.expiresAt };
       });
     }
 
@@ -242,17 +327,14 @@ app.get("/api/deals/nearby", async (req, res) => {
         Math.pow((dlat - userLat) * 111, 2)
       );
       const score = (discountNum * 0.6) + ((1 / (distKm + 0.1)) * 20 * 0.4);
-
       const dealIdStr = d._id.toString();
       const redemption = redemptionMap[dealIdStr];
       const isClaimed = claimedDealIds.has(dealIdStr);
       const isExpired = redemption ? new Date() > new Date(redemption.expiresAt) : false;
-
       return {
         ...d.toObject(),
         distanceKm: Math.round(distKm * 10) / 10,
         score: Math.round(score * 10) / 10,
-        // Redemption info for this user
         claimed: isClaimed,
         expired: isExpired,
         claimedAt: redemption?.claimedAt || null,
@@ -260,87 +342,53 @@ app.get("/api/deals/nearby", async (req, res) => {
       };
     }).sort((a, b) => b.score - a.score);
 
-    console.log(`🏷️ Returning ${scored.length} deals near ${userLat},${userLon}`);
     res.json(scored);
   } catch (err) {
-    console.error("❌ Deals error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 /* ==============================
    POST /api/deals/:id/redeem
-   Requires userId in body. Prevents double-claiming.
 ============================== */
 app.post("/api/deals/:id/redeem", async (req, res) => {
   try {
     const { userId } = req.body;
     const dealId = req.params.id;
-
     const deal = await Deal.findById(dealId);
     if (!deal) return res.status(404).json({ error: "Deal not found" });
     if (deal.usedCount >= deal.maxUses) return res.status(400).json({ error: "Deal fully redeemed" });
 
-    // If user is logged in, check + record redemption
     if (userId) {
       const existing = await Redemption.findOne({ userId, dealId });
-
       if (existing) {
-        // Already claimed — return existing timer info so frontend can resume
-        const secondsLeft = Math.max(
-          Math.floor((new Date(existing.expiresAt) - new Date()) / 1000),
-          0
-        );
-        return res.json({
-          success: true,
-          alreadyClaimed: true,
-          claimedAt: existing.claimedAt,
-          expiresAt: existing.expiresAt,
-          secondsLeft
-        });
+        const secondsLeft = Math.max(Math.floor((new Date(existing.expiresAt) - new Date()) / 1000), 0);
+        return res.json({ success: true, alreadyClaimed: true, claimedAt: existing.claimedAt, expiresAt: existing.expiresAt, secondsLeft });
       }
-
-      // New redemption — save to DB
       const claimedAt = new Date();
-      const expiresAt = new Date(claimedAt.getTime() + 3 * 60 * 1000); // +3 minutes
-
+      const expiresAt = new Date(claimedAt.getTime() + 3 * 60 * 1000);
       await Redemption.create({ userId, dealId, claimedAt, expiresAt });
-
-      // Increment usedCount
       deal.usedCount += 1;
       await deal.save();
-
-      return res.json({
-        success: true,
-        alreadyClaimed: false,
-        claimedAt,
-        expiresAt,
-        secondsLeft: 180,
-        remaining: deal.maxUses - deal.usedCount
-      });
+      return res.json({ success: true, alreadyClaimed: false, claimedAt, expiresAt, secondsLeft: 180, remaining: deal.maxUses - deal.usedCount });
     }
 
-    // Guest user — just increment count, no redemption record
     deal.usedCount += 1;
     await deal.save();
     res.json({ success: true, alreadyClaimed: false, secondsLeft: 180, remaining: deal.maxUses - deal.usedCount });
-
   } catch (err) {
-    console.error("❌ Redeem error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 /* ==============================
    GET /api/deals/my-redemptions/:userId
-   Returns all deals this user has claimed
 ============================== */
 app.get("/api/deals/my-redemptions/:userId", async (req, res) => {
   try {
     const redemptions = await Redemption.find({ userId: req.params.userId })
       .populate("dealId")
       .sort({ claimedAt: -1 });
-
     res.json(redemptions);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -348,7 +396,7 @@ app.get("/api/deals/my-redemptions/:userId", async (req, res) => {
 });
 
 /* ==============================
-   Geocode Location (Nominatim)
+   Geocode Location
 ============================== */
 async function geocodeLocation(location) {
   let searchQuery = location;
@@ -361,15 +409,11 @@ async function geocodeLocation(location) {
     { headers: { "User-Agent": "cafe-finder-app" } }
   );
   if (!response.data.length) throw new Error(`Location "${location}" not found.`);
-  return {
-    lat: parseFloat(response.data[0].lat),
-    lon: parseFloat(response.data[0].lon),
-    displayName: response.data[0].display_name
-  };
+  return { lat: parseFloat(response.data[0].lat), lon: parseFloat(response.data[0].lon), displayName: response.data[0].display_name };
 }
 
 /* ==============================
-   Fetch Cafes from Overpass API
+   Fetch Cafes from OSM
 ============================== */
 async function fetchCafesFromOSM(lat, lon) {
   const delta = 0.03;
@@ -566,78 +610,7 @@ app.get("/api/cafes/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-/* ==============================
-   Favorites Endpoints
-============================== */
 
-// GET /api/users/:userId/favorites — fetch populated favorites
-app.get("/api/users/:userId/favorites", async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId)
-      .populate("favorites");
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user.favorites);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/users/:userId/favorites/:cafeId — add a favorite
-app.post("/api/users/:userId/favorites/:cafeId", async (req, res) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      req.params.userId,
-      { $addToSet: { favorites: req.params.cafeId } }, // $addToSet prevents duplicates
-      { new: true }
-    ).populate("favorites");
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user.favorites);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /api/users/:userId/favorites/:cafeId — remove a favorite
-app.delete("/api/users/:userId/favorites/:cafeId", async (req, res) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      req.params.userId,
-      { $pull: { favorites: req.params.cafeId } },
-      { new: true }
-    ).populate("favorites");
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user.favorites);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-/* ==============================
-   Update Profile
-============================== */
-app.put("/api/auth/profile/:userId", async (req, res) => {
-  try {
-    const { name, avatar } = req.body;
-    const updates = {};
-    if (name && name.trim()) updates.name = name.trim();
-    if (avatar !== undefined) updates.avatar = avatar; // base64 string or ""
-
-    const user = await User.findByIdAndUpdate(
-      req.params.userId,
-      { $set: updates },
-      { new: true }
-    ).select("-password");
-
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    res.json({ message: "Profile updated", user: {
-      id: user._id, name: user.name, email: user.email,
-      avatar: user.avatar, favorites: user.favorites,
-      visits: user.visits, reviews: user.reviews, createdAt: user.createdAt
-    }});
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 app.get("/api/deals/reset-all", async (req, res) => {
   try {
     await Redemption.deleteMany({});

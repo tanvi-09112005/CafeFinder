@@ -7,50 +7,72 @@ const FavoritesContext = createContext();
 export function FavoritesProvider({ children }) {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState([]);
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
 
-  // Fetch favorites from backend whenever the logged-in user changes
   useEffect(() => {
-    if (!user?.id) {
-      setFavorites([]); // clear on logout
-      return;
-    }
+    if (user?.id) fetchFavorites();
+    else { setFavorites([]); setFavoriteIds(new Set()); }
+  }, [user?.id]);
 
-    setLoading(true);
-    fetch(`${API}/api/users/${user.id}/favorites`)
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setFavorites(data); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [user?.id]); // re-runs on login AND logout
+  const fetchFavorites = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API}/api/favorites/${user.id}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setFavorites(data);
+        setFavoriteIds(new Set(data.map(f => f.cafe.id.toString())));
+      }
+    } catch (err) {
+      console.error("Error fetching favorites:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleFavorite = useCallback(async (cafe) => {
-    const isAlreadyFav = favorites.some(f => f._id === cafe._id);
+    if (!user?.id) return;
+    const cafeId = (cafe._id || cafe.id)?.toString();
+    const isCurrentlyFavorited = favoriteIds.has(cafeId);
 
     // Optimistic update
-    setFavorites(prev =>
-      isAlreadyFav ? prev.filter(f => f._id !== cafe._id) : [...prev, cafe]
-    );
-
-    if (!user?.id) return; // guest — local state only
+    if (isCurrentlyFavorited) {
+      setFavoriteIds(prev => { const next = new Set(prev); next.delete(cafeId); return next; });
+      setFavorites(prev => prev.filter(f => f.cafe.id.toString() !== cafeId));
+    } else {
+      setFavoriteIds(prev => new Set([...prev, cafeId]));
+    }
 
     try {
-      const method = isAlreadyFav ? "DELETE" : "POST";
-      const res = await fetch(`${API}/api/users/${user.id}/favorites/${cafe._id}`, { method });
-      const updated = await res.json();
-      if (Array.isArray(updated)) setFavorites(updated);
+      await fetch(`${API}/api/favorites/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          userName: user.name,
+          userEmail: user.email,
+          cafe: {
+            id: cafeId,
+            name: cafe.name,
+            address: cafe.address,
+            photo: cafe.photo || cafe.photos?.[0],
+            cuisine: cafe.cuisine,
+            rating: cafe.rating,
+            distance: cafe.distance,
+          }
+        })
+      });
+      fetchFavorites();
     } catch (err) {
-      console.error("Failed to sync favorite:", err);
-      // Revert on error
-      setFavorites(prev =>
-        isAlreadyFav ? [...prev, cafe] : prev.filter(f => f._id !== cafe._id)
-      );
+      console.error("Error toggling favorite:", err);
+      fetchFavorites();
     }
-  }, [favorites, user?.id]);
+  }, [user, favoriteIds]);
 
   const isFavorite = useCallback(
-    (cafeId) => favorites.some(f => f._id === cafeId),
-    [favorites]
+    (cafeId) => favoriteIds.has(cafeId?.toString()),
+    [favoriteIds]
   );
 
   return (

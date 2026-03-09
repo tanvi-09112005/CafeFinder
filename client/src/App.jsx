@@ -12,7 +12,7 @@ import CafeDetail from './pages/CafeDetail';
 import Profile from './pages/Profile';
 import Favorites from './pages/Favorites';
 import Deals from './pages/Deals';
-
+import InstallBanner from './components/InstallBanner';
 function AnimatedRoutes() {
   const location = useLocation();
   const { user } = useAuth();
@@ -42,6 +42,7 @@ function AnimatedRoutes() {
       </AnimatePresence>
 
       {!isAuthPage && <BottomNav />}
+      {!isAuthPage && <InstallBanner />}
     </>
   );
 }

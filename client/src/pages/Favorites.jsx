@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Trash2, Loader2 } from "lucide-react";
+import { Heart, Trash2 } from "lucide-react";
 import CafeCard from "../components/CafeCard";
 import { useFavorites } from "../contexts/FavoritesContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -7,6 +7,12 @@ import { useAuth } from "../contexts/AuthContext";
 export default function Favorites() {
   const { favorites, toggleFavorite, loading } = useFavorites();
   const { user } = useAuth();
+
+  // Normalize DB shape { cafe: { id, name, ... } } → flat object with _id for CafeCard
+  const normalizedFavorites = favorites.map(f => ({
+    ...f.cafe,
+    _id: f.cafe.id,
+  }));
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24 md:pb-8">
@@ -24,13 +30,13 @@ export default function Favorites() {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Favorites</h1>
           </div>
           <p className="text-gray-500 text-sm">
-            {favorites.length} cafe{favorites.length !== 1 ? "s" : ""} saved
+            {loading ? "Loading..." : `${favorites.length} cafe${favorites.length !== 1 ? "s" : ""} saved`}
           </p>
         </motion.div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <div className="flex justify-center py-24">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : favorites.length === 0 ? (
           <motion.div
@@ -51,7 +57,7 @@ export default function Favorites() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             <AnimatePresence mode="popLayout">
-              {favorites.map((cafe, i) => (
+              {normalizedFavorites.map((cafe, i) => (
                 <motion.div
                   key={cafe._id}
                   layout
