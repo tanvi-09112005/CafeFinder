@@ -27,7 +27,8 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Cafe' }],
   visits: { type: Number, default: 0 },
-  reviews: { type: Number, default: 0 }
+  reviews: { type: Number, default: 0 },
+  avatar: { type: String, default: "" }
 });
 const User = mongoose.model("User", userSchema);
 
@@ -465,7 +466,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
     const user = await User.findOne({ email });
     if (!user || user.password !== password) return res.status(401).json({ error: "Invalid email or password" });
-    res.json({ message: "Login successful", user: { id: user._id, name: user.name, email: user.email, favorites: user.favorites, visits: user.visits, reviews: user.reviews, createdAt: user.createdAt } });
+    res.json({ message: "Login successful", user: { id: user._id, name: user.name, email: user.email,avatar: user.avatar,   favorites: user.favorites, visits: user.visits, reviews: user.reviews, createdAt: user.createdAt } });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -563,6 +564,78 @@ app.get("/api/cafes/:id", async (req, res) => {
     res.json({ ...cafe.toObject(), reviews: mockReviews, menu: mockMenu, rating: 4.5, reviewCount: 127 });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+/* ==============================
+   Favorites Endpoints
+============================== */
+
+// GET /api/users/:userId/favorites — fetch populated favorites
+app.get("/api/users/:userId/favorites", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .populate("favorites");
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user.favorites);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:userId/favorites/:cafeId — add a favorite
+app.post("/api/users/:userId/favorites/:cafeId", async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { $addToSet: { favorites: req.params.cafeId } }, // $addToSet prevents duplicates
+      { new: true }
+    ).populate("favorites");
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user.favorites);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/users/:userId/favorites/:cafeId — remove a favorite
+app.delete("/api/users/:userId/favorites/:cafeId", async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { $pull: { favorites: req.params.cafeId } },
+      { new: true }
+    ).populate("favorites");
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user.favorites);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+/* ==============================
+   Update Profile
+============================== */
+app.put("/api/auth/profile/:userId", async (req, res) => {
+  try {
+    const { name, avatar } = req.body;
+    const updates = {};
+    if (name && name.trim()) updates.name = name.trim();
+    if (avatar !== undefined) updates.avatar = avatar; // base64 string or ""
+
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { $set: updates },
+      { new: true }
+    ).select("-password");
+
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({ message: "Profile updated", user: {
+      id: user._id, name: user.name, email: user.email,
+      avatar: user.avatar, favorites: user.favorites,
+      visits: user.visits, reviews: user.reviews, createdAt: user.createdAt
+    }});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 app.get("/api/deals/reset-all", async (req, res) => {

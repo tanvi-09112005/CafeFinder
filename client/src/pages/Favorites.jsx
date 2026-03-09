@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Trash2 } from "lucide-react";
+import { Heart, Trash2, Loader2 } from "lucide-react";
 import CafeCard from "../components/CafeCard";
 import { useFavorites } from "../contexts/FavoritesContext";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Favorites() {
-  const { favorites, toggleFavorite } = useFavorites();
+  const { favorites, toggleFavorite, loading } = useFavorites();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24 md:pb-8">
@@ -26,7 +28,11 @@ export default function Favorites() {
           </p>
         </motion.div>
 
-        {favorites.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          </div>
+        ) : favorites.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -37,7 +43,9 @@ export default function Favorites() {
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">No favorites yet</h3>
             <p className="text-gray-500 text-sm text-center max-w-xs">
-              Start exploring cafes and tap the heart icon to save your favorites here.
+              {user
+                ? "Start exploring cafes and tap the heart icon to save your favorites here."
+                : "Log in to save favorites across devices, or start exploring as a guest."}
             </p>
           </motion.div>
         ) : (
