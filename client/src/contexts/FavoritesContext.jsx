@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-
-const API = "http://localhost:5000";
+import { API } from "../config";
 const FavoritesContext = createContext();
 
 export function FavoritesProvider({ children }) {

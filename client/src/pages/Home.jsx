@@ -9,6 +9,7 @@ import CategoryPills from "../components/CategoryPills";
 import CafeCard from "../components/CafeCard";
 import { useAuth } from "../contexts/AuthContext";
 import SectionHeader from "../components/SectionHeader";
+import { API } from "../config";
 
 const categories = [
   { id: "all",    name: "All" },
@@ -96,7 +97,7 @@ export default function Home() {
   const fetchCafesWithCoords = async (lat, lon) => {
     try {
       setLoading(true); setError(null);
-      const res  = await fetch(`http://localhost:5000/api/cafes/coordinates?lat=${lat}&lon=${lon}`);
+      const res  = await fetch(`${API}/api/cafes/coordinates?lat=${lat}&lon=${lon}`);
       const data = await res.json();
       setCafes(Array.isArray(data.cafes) ? data.cafes : Array.isArray(data) ? data : []);
     } catch (err) { setError(err.message); setCafes([]); }
@@ -106,7 +107,7 @@ export default function Home() {
   const fetchCafes = async () => {
     try {
       setLoading(true); setError(null);
-      const res  = await fetch(`http://localhost:5000/api/cafes?location=${encodeURIComponent(userLocation)}`);
+      const res  = await fetch(`${API}/api/cafes?location=${encodeURIComponent(userLocation)}`);
       const data = await res.json();
       setCafes(Array.isArray(data.cafes) ? data.cafes : Array.isArray(data) ? data : []);
     } catch (err) { setError(err.message); setCafes([]); }

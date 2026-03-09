@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { API } from "../config";
 
 const AuthContext = createContext();
 
@@ -11,7 +12,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is stored in localStorage
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -21,22 +21,15 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${API}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      // Store user in state and localStorage
+      if (!response.ok) throw new Error(data.error || 'Login failed');
       setUser(data.user);
       localStorage.setItem('user', JSON.stringify(data.user));
-      
       return data.user;
     } catch (error) {
       throw error;
@@ -45,19 +38,13 @@ export function AuthProvider({ children }) {
 
   const signup = async (name, email, password) => {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/signup', {
+      const response = await fetch(`${API}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password })
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Signup failed');
-      }
-
-      // Auto login after signup
+      if (!response.ok) throw new Error(data.error || 'Signup failed');
       return await login(email, password);
     } catch (error) {
       throw error;
@@ -69,16 +56,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('user');
   };
 
-  const value = {
-    user,
-    loading,
-    login,
-    signup,
-    logout
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

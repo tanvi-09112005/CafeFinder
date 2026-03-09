@@ -8,8 +8,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useFavorites } from "../contexts/FavoritesContext";
-
-const API = "http://localhost:5000";
+import { API } from "../config";
 
 const menuItems = [
   { icon: Bell,       label: "Notifications",      desc: "Push & email preferences" },

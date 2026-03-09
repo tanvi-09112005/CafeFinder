@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { API } from "../config";
 
 export default function CafeDetail() {
   const { id } = useParams();
@@ -30,7 +31,7 @@ export default function CafeDetail() {
   const fetchCafeDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/cafes/${id}`);
+      const response = await fetch(`${API}/api/cafes/${id}`);
       
       if (!response.ok) {
         throw new Error("Cafe not found");

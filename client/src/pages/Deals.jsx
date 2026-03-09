@@ -3,6 +3,7 @@ import { Tag, Clock, Sparkles, Coffee, X, Smartphone, CheckCircle, MapPin, Shiel
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { API } from "../config";
 
 const TIMER_DURATION = 180; // 3 minutes
 
@@ -203,7 +204,7 @@ function DealCard({ deal, index, userId }) {
 
     setClaiming(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/deals/${deal._id}/redeem`, {
+      const res = await fetch(`${API}/api/deals/${deal._id}/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId })
@@ -309,7 +310,7 @@ export default function Deals() {
   const fetchDeals = async (lat, lon) => {
     try {
       const userParam = user?.id ? `&userId=${user.id}` : "";
-      const res = await fetch(`http://localhost:5000/api/deals/nearby?lat=${lat}&lon=${lon}${userParam}`);
+      const res = await fetch(`${API}/api/deals/nearby?lat=${lat}&lon=${lon}${userParam}`);
       const data = await res.json();
       setDeals(Array.isArray(data) ? data : []);
     } catch (e) {
