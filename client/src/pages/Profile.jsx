@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   User,
   Settings,
@@ -26,32 +27,35 @@ const menuItems = [
   { icon: Settings, label: "App Settings", desc: "Theme, language, etc." },
 ];
 
-const stats = [
-  { label: "Visits", value: "visits", icon: MapPin },
-  { label: "Reviews", value: "reviews", icon: Star },
-  { label: "Favorites", value: "favorites", icon: Heart },
-];
-
 export default function Profile() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [favoritesCount, setFavoritesCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`http://localhost:5000/api/favorites/${user.id}`)
+        .then(res => res.json())
+        .then(data => setFavoritesCount(Array.isArray(data) ? data.length : 0))
+        .catch(() => setFavoritesCount(0));
+    }
+  }, [user]);
+
+  const stats = [
+    { label: "Visits", value: user?.visits || 0, icon: MapPin },
+    { label: "Reviews", value: user?.reviews || 0, icon: Star },
+    { label: "Favorites", value: favoritesCount, icon: Heart },
+  ];
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  // Get user initials
   const getInitials = (name) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  // Format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -104,7 +108,6 @@ export default function Profile() {
           <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-dark-border">
             {stats.map((stat, i) => {
               const Icon = stat.icon;
-              const value = user?.[stat.value] || 0;
               return (
                 <motion.div
                   key={stat.label}
@@ -115,7 +118,7 @@ export default function Profile() {
                 >
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <Icon className="w-4 h-4 text-primary" />
-                    <span className="text-xl font-bold text-white">{value}</span>
+                    <span className="text-xl font-bold text-white">{stat.value}</span>
                   </div>
                   <p className="text-xs text-gray-500">{stat.label}</p>
                 </motion.div>
