@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://your-app.vercel.app"
+    "https://cafe-finder-gamma-ten.vercel.app"
   ],
   credentials: true
 }));
