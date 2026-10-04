@@ -12,6 +12,7 @@ import CafeDetail from './pages/CafeDetail';
 import Profile from './pages/Profile';
 import Favorites from './pages/Favorites';
 import Deals from './pages/Deals';
+import MapPage from './pages/MapPage';
 import InstallBanner from './components/InstallBanner';
 function AnimatedRoutes() {
   const location = useLocation();
@@ -31,6 +32,7 @@ function AnimatedRoutes() {
 
           {/* Protected routes */}
           <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
           <Route path="/cafe/:id" element={<ProtectedRoute><CafeDetail /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />

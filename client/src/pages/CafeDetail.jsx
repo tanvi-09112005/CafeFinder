@@ -10,9 +10,11 @@ import {
   Share2,
   Navigation,
   Loader2,
+  Map as MapIcon,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { API } from "../config";
+import MapComponent from "../components/MapComponent";
 
 export default function CafeDetail() {
   const { id } = useParams();
@@ -47,13 +49,13 @@ export default function CafeDetail() {
   };
 
   const handleGetDirections = () => {
-    if (!cafe) return;
+    if (!cafe?.location?.coordinates) return;
     
     const [lon, lat] = cafe.location.coordinates;
     
-    // Open Google Maps in new tab
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-    window.open(googleMapsUrl, '_blank');
+    // Open free and open-source OpenStreetMap directions
+    const osmUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=%3B${lat},${lon}`;
+    window.open(osmUrl, '_blank');
   };
 
   const handleCallNow = () => {
@@ -301,6 +303,34 @@ export default function CafeDetail() {
               </div>
             </div>
           </div>
+
+          {/* Location Map Preview */}
+          {cafe.location?.coordinates && (
+            <div className="mt-5 pt-5 border-t border-white/5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <MapIcon className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-white">Location on OpenStreetMap</span>
+                </div>
+                <Link
+                  to="/map"
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Explore in Map View →
+                </Link>
+              </div>
+              <div className="h-56 w-full rounded-2xl overflow-hidden border border-dark-border">
+                <MapComponent
+                  cafes={[cafe]}
+                  selectedCafe={cafe}
+                  center={[cafe.location.coordinates[1], cafe.location.coordinates[0]]}
+                  zoom={15}
+                  autoFit={false}
+                  className="w-full h-full"
+                />
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Tabs */}

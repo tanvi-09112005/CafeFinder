@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin, Loader2, Navigation, SlidersHorizontal,
-  Wifi, Sun, Star, X, ChevronDown, PackageCheck
+  Wifi, Sun, Star, X, ChevronDown, PackageCheck, Map as MapIcon
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import SearchBar from "../components/SearchBar";
 import CategoryPills from "../components/CategoryPills";
 import CafeCard from "../components/CafeCard";
@@ -231,29 +232,51 @@ export default function Home() {
 
         {/* ── Greeting ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-8">
-          <div className="flex items-center gap-2 text-gray-500 text-sm mb-1 flex-wrap">
-            <MapPin className="w-4 h-4 shrink-0" />
-            <span>{userLocation}</span>
-            <button onClick={handleLocationChange} className="text-primary text-xs hover:underline">Change</button>
-            <button
-              onClick={() => { setUseMyLocation(true); getUserLocation(); }}
-              className="flex items-center gap-1 text-primary text-xs hover:underline border-l border-dark-border pl-2"
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-gray-500 text-sm mb-1 flex-wrap">
+                <MapPin className="w-4 h-4 shrink-0 text-primary" />
+                <span>{userLocation}</span>
+                <button onClick={handleLocationChange} className="text-primary text-xs hover:underline">Change</button>
+                <button
+                  onClick={() => { setUseMyLocation(true); getUserLocation(); }}
+                  className="flex items-center gap-1 text-primary text-xs hover:underline border-l border-dark-border pl-2"
+                >
+                  <Navigation className="w-3 h-3" /> Use My Location
+                </button>
+              </div>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
+                Hello, <span className="text-primary">{user?.name?.split(" ")[0] || "Coffee Lover"}!</span>
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">
+                {isFiltering ? `${finalCafes.length} result${finalCafes.length !== 1 ? "s" : ""}` : `${enriched.length} cafes near you`}
+              </p>
+            </div>
+
+            <Link
+              to="/map"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-primary/10 border border-primary/30 text-primary hover:bg-primary hover:text-black transition-all text-sm font-semibold self-start sm:self-auto shadow-sm"
             >
-              <Navigation className="w-3 h-3" /> Use My Location
-            </button>
+              <MapIcon className="w-4 h-4" />
+              <span>Explore on Map</span>
+            </Link>
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
-            Hello, <span className="text-primary">{user?.name?.split(" ")[0] || "Coffee Lover"}!</span>
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {isFiltering ? `${finalCafes.length} result${finalCafes.length !== 1 ? "s" : ""}` : `${enriched.length} cafes near you`}
-          </p>
         </motion.div>
 
         {/* ── Search + Filter + Sort row ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="mb-4">
           <div className="flex gap-3 items-center">
             <div className="flex-1"><SearchBar value={search} onChange={setSearch} /></div>
+
+            {/* Map view button */}
+            <Link
+              to="/map"
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-3 rounded-2xl border border-primary/40 bg-primary/10 text-primary hover:bg-primary hover:text-black transition-all shrink-0 font-medium text-sm"
+              title="Open Map View"
+            >
+              <MapIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">Map</span>
+            </Link>
 
             {/* Filter button */}
             <button

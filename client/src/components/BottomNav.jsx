@@ -1,9 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Heart, Tag, User } from "lucide-react";
+import { Home, Heart, Tag, User, Map as MapIcon } from "lucide-react";
 import { motion } from "framer-motion";
 
 const tabs = [
   { name: "Home", path: "/", icon: Home },
+  { name: "Map", path: "/map", icon: MapIcon },
   { name: "Favorites", path: "/favorites", icon: Heart },
   { name: "Deals", path: "/deals", icon: Tag },
   { name: "Profile", path: "/profile", icon: User },

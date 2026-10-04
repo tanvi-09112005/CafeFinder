@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Coffee, Menu, X, Heart, Tag, User, Home } from "lucide-react";
+import { Coffee, Menu, X, Heart, Tag, User, Home, Map as MapIcon } from "lucide-react";
 
 const navLinks = [
   { name: "Home", path: "/", icon: Home },
+  { name: "Map", path: "/map", icon: MapIcon },
   { name: "Favorites", path: "/favorites", icon: Heart },
   { name: "Deals", path: "/deals", icon: Tag },
   { name: "Profile", path: "/profile", icon: User },
