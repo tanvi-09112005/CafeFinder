@@ -3,6 +3,19 @@ import L from "leaflet";
 import { useNavigate } from "react-router-dom";
 
 /**
+ * Escape HTML to prevent injection and attribute breaking
+ */
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
  * Creates custom SVG icon for cafe markers
  */
 function createCafeIcon(isSelected = false) {
@@ -88,12 +101,18 @@ export default function MapComponent({
   const userMarkerRef = useRef(null);
   const navigate = useNavigate();
 
-  // Initialize Map
+  // Initialize Map with StrictMode protection
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    const container = mapContainerRef.current;
+    if (!container) return;
+
+    // Fix for React StrictMode: Clean up any stale leaflet ID before creating instance
+    if (container._leaflet_id) {
+      delete container._leaflet_id;
+    }
 
     if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
+      const map = L.map(container, {
         center: center,
         zoom: zoom,
         zoomControl: true,
@@ -112,7 +131,6 @@ export default function MapComponent({
       mapInstanceRef.current = map;
 
       // Handle popup action button clicks delegated through map container
-      const container = mapContainerRef.current;
       const handlePopupClick = (e) => {
         const detailBtn = e.target.closest("[data-view-cafe]");
         if (detailBtn) {
@@ -122,21 +140,54 @@ export default function MapComponent({
       };
       container.addEventListener("click", handlePopupClick);
 
+      // Force recalculate dimensions once layout settles
+      const resizeTimer = setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 250);
+
+      // Window resize listener
+      const handleWindowResize = () => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      };
+      window.addEventListener("resize", handleWindowResize);
+
       return () => {
+        clearTimeout(resizeTimer);
+        window.removeEventListener("resize", handleWindowResize);
         container.removeEventListener("click", handlePopupClick);
-        map.remove();
-        mapInstanceRef.current = null;
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+        }
         markersGroupRef.current = null;
+        if (container._leaflet_id) {
+          delete container._leaflet_id;
+        }
       };
     }
   }, []);
+
+  // Update center when prop changes and map is ready
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !center) return;
+    if (Array.isArray(center) && center.length === 2 && !isNaN(center[0]) && !isNaN(center[1])) {
+      if (!selectedCafe) {
+        map.setView(center, map.getZoom() || zoom);
+      }
+    }
+  }, [center]);
 
   // Update User Location Marker
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    if (userCoords?.lat && userCoords?.lon) {
+    if (userCoords?.lat && userCoords?.lon && !isNaN(userCoords.lat) && !isNaN(userCoords.lon)) {
       if (!userMarkerRef.current) {
         userMarkerRef.current = L.marker([userCoords.lat, userCoords.lon], {
           icon: createUserLocationIcon(),
@@ -165,86 +216,99 @@ export default function MapComponent({
     const bounds = L.latLngBounds([]);
     let validCount = 0;
 
-    cafes.forEach((cafe) => {
-      // In GeoJSON, coordinates are [longitude, latitude]
-      const lat = cafe.location?.coordinates?.[1];
-      const lon = cafe.location?.coordinates?.[0];
+    if (Array.isArray(cafes)) {
+      cafes.forEach((cafe) => {
+        if (!cafe) return;
+        // In GeoJSON, coordinates are [longitude, latitude]
+        const lat = cafe.location?.coordinates?.[1];
+        const lon = cafe.location?.coordinates?.[0];
 
-      if (typeof lat !== "number" || typeof lon !== "number" || isNaN(lat) || isNaN(lon)) {
-        return;
-      }
+        if (typeof lat !== "number" || typeof lon !== "number" || isNaN(lat) || isNaN(lon)) {
+          return;
+        }
 
-      const isSelected = selectedCafe?._id && selectedCafe._id === cafe._id;
-      const marker = L.marker([lat, lon], {
-        icon: createCafeIcon(isSelected),
-      });
+        const isSelected = selectedCafe?._id && selectedCafe._id === cafe._id;
+        const marker = L.marker([lat, lon], {
+          icon: createCafeIcon(isSelected),
+        });
 
-      // Construct popup HTML
-      const photo = cafe.photo || cafe.photos?.[0] || "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
-      const rating = cafe.rating ? Number(cafe.rating).toFixed(1) : "4.5";
-      const reviews = cafe.reviewCount || 120;
-      const cuisine = cafe.cuisine || "Coffee & Snacks";
-      const address = cafe.address || "Address unavailable";
+        // Construct popup HTML with escaped strings
+        const photo = cafe.photo || cafe.photos?.[0] || "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
+        const rating = cafe.rating ? Number(cafe.rating).toFixed(1) : "4.5";
+        const reviews = cafe.reviewCount || cafe.reviews?.length || 120;
+        const cuisine = escapeHtml(cafe.cuisine || "Coffee & Snacks");
+        const name = escapeHtml(cafe.name || "Local Cafe");
+        const address = escapeHtml(cafe.address || "Address unavailable");
+        const cafeId = escapeHtml(cafe._id || "");
 
-      const popupHtml = `
-        <div style="width: 250px; overflow: hidden; border-radius: 16px; font-family: 'Poppins', sans-serif;">
-          <div style="position: relative; height: 110px; width: 100%; background: #1a1a1a;">
-            <img src="${photo}" alt="${cafe.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg';" />
-            <div style="position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; color: #f0d078; display: flex; align-items: center; gap: 4px;">
-              ★ ${rating} <span style="color: #bbb; font-weight: normal;">(${reviews})</span>
+        const directionsUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${
+          userCoords?.lat ? `${userCoords.lat},${userCoords.lon}%3B` : ""
+        }${lat},${lon}`;
+
+        const popupHtml = `
+          <div style="width: 250px; overflow: hidden; border-radius: 16px; font-family: 'Poppins', sans-serif;">
+            <div style="position: relative; height: 110px; width: 100%; background: #1a1a1a;">
+              <img src="${photo}" alt="${name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg';" />
+              <div style="position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; color: #f0d078; display: flex; align-items: center; gap: 4px;">
+                ★ ${rating} <span style="color: #bbb; font-weight: normal;">(${reviews})</span>
+              </div>
+              ${cafe.wifi ? '<span style="position: absolute; top: 8px; right: 8px; background: rgba(212,168,67,0.9); color: #000; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px;">WiFi</span>' : ''}
             </div>
-            ${cafe.wifi ? '<span style="position: absolute; top: 8px; right: 8px; background: rgba(212,168,67,0.9); color: #000; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px;">WiFi</span>' : ''}
-          </div>
-          <div style="padding: 12px; background: #242424; color: #fff;">
-            <h4 style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${cafe.name}
-            </h4>
-            <p style="margin: 0 0 8px; font-size: 12px; color: #d4a843; font-weight: 500;">
-              ${cuisine}
-            </p>
-            <p style="margin: 0 0 12px; font-size: 11px; color: #999; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-              📍 ${address}
-            </p>
-            <div style="display: flex; gap: 8px;">
-              <button 
-                data-view-cafe="${cafe._id}" 
-                style="flex: 1; padding: 7px 10px; background: #d4a843; color: #000; border: none; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; transition: opacity 0.2s;"
-                onmouseover="this.style.opacity='0.9'"
-                onmouseout="this.style.opacity='1'"
-              >
-                View Details
-              </button>
-              <a 
-                href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${userCoords?.lat ? `${userCoords.lat},${userCoords.lon}%3B` : ''}${lat},${lon}"
-                target="_blank"
-                rel="noopener noreferrer"
-                style="padding: 7px 10px; background: #333; color: #fff; text-decoration: none; border-radius: 8px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;"
-              >
-                Directions ↗
-              </a>
+            <div style="padding: 12px; background: #242424; color: #fff;">
+              <h4 style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${name}
+              </h4>
+              <p style="margin: 0 0 8px; font-size: 12px; color: #d4a843; font-weight: 500;">
+                ${cuisine}
+              </p>
+              <p style="margin: 0 0 12px; font-size: 11px; color: #999; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                📍 ${address}
+              </p>
+              <div style="display: flex; gap: 8px;">
+                <button 
+                  data-view-cafe="${cafeId}" 
+                  style="flex: 1; padding: 7px 10px; background: #d4a843; color: #000; border: none; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; transition: opacity 0.2s;"
+                >
+                  View Details
+                </button>
+                <a 
+                  href="${directionsUrl}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="padding: 7px 10px; background: #333; color: #fff; text-decoration: none; border-radius: 8px; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;"
+                >
+                  Directions ↗
+                </a>
+              </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
 
-      marker.bindPopup(popupHtml, {
-        maxWidth: 270,
-        className: "custom-leaflet-popup",
+        marker.bindPopup(popupHtml, {
+          maxWidth: 270,
+          className: "custom-leaflet-popup",
+        });
+
+        marker.on("click", () => {
+          if (onSelectCafe) onSelectCafe(cafe);
+        });
+
+        group.addLayer(marker);
+        if (cafe._id) {
+          markersRef.current.set(cafe._id, marker);
+        }
+        bounds.extend([lat, lon]);
+        validCount++;
       });
+    }
 
-      marker.on("click", () => {
-        if (onSelectCafe) onSelectCafe(cafe);
-      });
-
-      group.addLayer(marker);
-      markersRef.current.set(cafe._id, marker);
-      bounds.extend([lat, lon]);
-      validCount++;
-    });
-
-    // Auto fit bounds if enabled
+    // Auto fit bounds if enabled and valid markers exist
     if (autoFit && validCount > 0 && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      try {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      } catch (err) {
+        console.warn("fitBounds warning:", err);
+      }
     }
   }, [cafes, userCoords]);
 
@@ -256,22 +320,24 @@ export default function MapComponent({
     const lat = selectedCafe.location?.coordinates?.[1];
     const lon = selectedCafe.location?.coordinates?.[0];
 
-    if (lat && lon) {
-      map.flyTo([lat, lon], 15, { duration: 1 });
-      const marker = markersRef.current.get(selectedCafe._id);
-      if (marker) {
-        marker.openPopup();
-        // Update all marker icons so selected is highlighted
-        markersRef.current.forEach((m, id) => {
-          m.setIcon(createCafeIcon(id === selectedCafe._id));
-        });
+    if (lat && lon && !isNaN(lat) && !isNaN(lon)) {
+      map.flyTo([lat, lon], 15, { duration: 0.8 });
+      if (selectedCafe._id) {
+        const marker = markersRef.current.get(selectedCafe._id);
+        if (marker) {
+          marker.openPopup();
+          // Update marker icons so selected is highlighted
+          markersRef.current.forEach((m, id) => {
+            m.setIcon(createCafeIcon(id === selectedCafe._id));
+          });
+        }
       }
     }
   }, [selectedCafe]);
 
   return (
     <div className={`relative rounded-3xl overflow-hidden shadow-2xl border border-dark-border ${className}`}>
-      <div ref={mapContainerRef} className="w-full h-full" />
+      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: "100%", width: "100%" }} />
     </div>
   );
 }

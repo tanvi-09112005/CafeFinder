@@ -5,7 +5,6 @@ import {
   Navigation,
   Loader2,
   Search,
-  SlidersHorizontal,
   Wifi,
   Sun,
   PackageCheck,
@@ -15,6 +14,8 @@ import {
   ChevronRight,
   X,
   Compass,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import MapComponent from "../components/MapComponent";
@@ -51,7 +52,9 @@ export default function MapPage() {
       setLoading(true);
       setError(null);
       const res = await fetch(`${API}/api/cafes?location=${encodeURIComponent(userLocationName)}`);
-      if (!res.ok) throw new Error("Failed to load cafes");
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}: Check if MongoDB Atlas is connected`);
+      }
       const data = await res.json();
       const list = Array.isArray(data.cafes) ? data.cafes : Array.isArray(data) ? data : [];
       setCafes(list);
@@ -61,8 +64,8 @@ export default function MapPage() {
         setMapCenter([list[0].location.coordinates[1], list[0].location.coordinates[0]]);
       }
     } catch (err) {
-      setError(err.message);
-      setCafes([]);
+      console.warn("Error fetching cafes:", err);
+      setError(err.message || "Failed to load cafes");
     } finally {
       setLoading(false);
     }
@@ -93,20 +96,20 @@ export default function MapPage() {
           setUserLocationName(placeName);
           localStorage.setItem("userLocation", placeName);
 
-          // Fetch cafes by coordinates
           const cafeRes = await fetch(
             `${API}/api/cafes/coordinates?lat=${latitude}&lon=${longitude}`
           );
-          const cafeData = await cafeRes.json();
-          setCafes(
-            Array.isArray(cafeData.cafes)
-              ? cafeData.cafes
-              : Array.isArray(cafeData)
-              ? cafeData
-              : []
-          );
+          if (cafeRes.ok) {
+            const cafeData = await cafeRes.json();
+            setCafes(
+              Array.isArray(cafeData.cafes)
+                ? cafeData.cafes
+                : Array.isArray(cafeData)
+                ? cafeData
+                : []
+            );
+          }
         } catch {
-          // Fallback fetch
           fetchCafes();
         } finally {
           setLoading(false);
@@ -136,7 +139,9 @@ export default function MapPage() {
 
   // Filter cafes based on category, search, and amenities
   const filteredCafes = useMemo(() => {
+    if (!Array.isArray(cafes)) return [];
     return cafes.filter((cafe) => {
+      if (!cafe) return false;
       // 1. Text Search
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -175,7 +180,7 @@ export default function MapPage() {
 
   const handleSelectCafe = (cafe) => {
     setSelectedCafe(cafe);
-    // Scroll corresponding card in bottom carousel into view
+    if (!cafe?._id) return;
     const cardElement = document.getElementById(`carousel-cafe-${cafe._id}`);
     if (cardElement && carouselRef.current) {
       cardElement.scrollIntoView({
@@ -194,7 +199,7 @@ export default function MapPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-4 pb-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
+            <div className="flex items-center gap-2 text-xs text-gray-400 mb-1 flex-wrap">
               <MapPin className="w-3.5 h-3.5 text-primary" />
               <span>Browsing around <strong className="text-white">{userLocationName}</strong></span>
               <button
@@ -221,7 +226,7 @@ export default function MapPage() {
           <div className="flex items-center gap-3">
             <Link
               to="/"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-dark-card border border-dark-border text-sm font-medium hover:border-primary/40 text-gray-300 hover:text-white transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-dark-card border border-dark-border text-sm font-medium hover:border-primary/40 text-gray-300 hover:text-white transition-all shadow-sm"
             >
               <List className="w-4 h-4 text-primary" />
               <span>List View</span>
@@ -259,7 +264,7 @@ export default function MapPage() {
                 onClick={() => setActiveCategory(c.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap border transition-all ${
                   activeCategory === c.id
-                    ? "bg-primary text-black border-primary"
+                    ? "bg-primary text-black border-primary font-semibold"
                     : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
                 }`}
               >
@@ -274,7 +279,7 @@ export default function MapPage() {
               onClick={() => toggleAmenity("wifi")}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 activeAmenities.includes("wifi")
-                  ? "bg-primary text-black border-primary"
+                  ? "bg-primary text-black border-primary font-semibold"
                   : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
               }`}
             >
@@ -284,7 +289,7 @@ export default function MapPage() {
               onClick={() => toggleAmenity("outdoor")}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 activeAmenities.includes("outdoor")
-                  ? "bg-primary text-black border-primary"
+                  ? "bg-primary text-black border-primary font-semibold"
                   : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
               }`}
             >
@@ -294,7 +299,7 @@ export default function MapPage() {
               onClick={() => toggleAmenity("takeaway")}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 activeAmenities.includes("takeaway")
-                  ? "bg-primary text-black border-primary"
+                  ? "bg-primary text-black border-primary font-semibold"
                   : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
               }`}
             >
@@ -304,130 +309,161 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* ── Main Map Container ── */}
+      {/* ── Main Map View Container (Always Mounted) ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 flex flex-col relative min-h-[500px]">
-        {loading ? (
-          <div className="w-full h-[520px] rounded-3xl bg-dark-card flex flex-col items-center justify-center border border-dark-border">
-            <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-            <p className="text-gray-400 text-sm">Rendering OpenStreetMap layer and cafes...</p>
+        <div className="relative w-full flex-1 h-[62vh] sm:h-[68vh] min-h-[460px] rounded-3xl overflow-hidden border border-dark-border shadow-2xl">
+          {/* Leaflet Map is always mounted and responsive */}
+          <MapComponent
+            cafes={filteredCafes}
+            selectedCafe={selectedCafe}
+            onSelectCafe={handleSelectCafe}
+            center={mapCenter}
+            zoom={14}
+            userCoords={userCoords}
+            className="w-full h-full"
+          />
+
+          {/* Loading Overlay */}
+          <AnimatePresence>
+            {loading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-30 bg-black/50 backdrop-blur-sm flex items-center justify-center pointer-events-none"
+              >
+                <div className="glass px-6 py-4 rounded-2xl flex items-center gap-3 border border-white/10 shadow-2xl">
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                  <span className="text-sm font-medium text-white">Loading cafes from OpenStreetMap...</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Error Banner (Non-blocking) */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="absolute top-4 left-4 right-4 sm:left-auto sm:right-16 z-30 max-w-md bg-red-950/90 border border-red-500/40 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span className="text-red-200">{error}</span>
+                </div>
+                <button
+                  onClick={fetchCafes}
+                  className="px-2.5 py-1 bg-red-500 text-white rounded-lg font-bold flex items-center gap-1 hover:bg-red-600 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" /> Retry
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Floating Map Stats Badge */}
+          <div className="absolute top-4 left-4 z-20 pointer-events-none">
+            <div className="glass px-3.5 py-1.5 rounded-xl border border-white/10 shadow-lg flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-gray-200">
+                {filteredCafes.length} cafe{filteredCafes.length !== 1 ? "s" : ""} on map
+              </span>
+            </div>
           </div>
-        ) : error ? (
-          <div className="w-full h-[520px] rounded-3xl bg-dark-card flex flex-col items-center justify-center border border-dark-border p-6 text-center">
-            <Coffee className="w-12 h-12 text-primary mb-3 opacity-60" />
-            <p className="text-gray-300 font-medium mb-1">Could not load cafe map data</p>
-            <p className="text-gray-500 text-xs mb-4">{error}</p>
+
+          {/* Recenter / Locate Me Button */}
+          <div className="absolute top-4 right-4 z-20">
             <button
-              onClick={fetchCafes}
-              className="px-5 py-2 rounded-xl bg-primary text-black text-sm font-semibold hover:bg-primary-light transition-all"
+              onClick={handleUseMyLocation}
+              title="Center on my location"
+              className="w-10 h-10 rounded-xl bg-dark-card/90 backdrop-blur-md border border-white/10 flex items-center justify-center text-primary hover:bg-primary hover:text-black transition-all shadow-lg cursor-pointer"
             >
-              Retry
+              <Compass className="w-5 h-5" />
             </button>
           </div>
-        ) : (
-          <div className="relative w-full flex-1 h-[60vh] sm:h-[65vh] min-h-[460px] rounded-3xl overflow-hidden">
-            <MapComponent
-              cafes={filteredCafes}
-              selectedCafe={selectedCafe}
-              onSelectCafe={handleSelectCafe}
-              center={mapCenter}
-              zoom={14}
-              userCoords={userCoords}
-              className="w-full h-full"
-            />
 
-            {/* Floating Map Info Overlay */}
-            <div className="absolute top-4 left-4 z-20 pointer-events-none">
-              <div className="glass px-3.5 py-1.5 rounded-xl border border-white/10 shadow-lg flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-medium text-gray-200">
-                  {filteredCafes.length} cafe{filteredCafes.length !== 1 ? "s" : ""} plotted
-                </span>
-              </div>
-            </div>
+          {/* ── Bottom Carousel of Cafe Cards ── */}
+          {filteredCafes.length > 0 ? (
+            <div
+              ref={carouselRef}
+              className="absolute bottom-4 left-4 right-4 z-20 flex gap-3 overflow-x-auto hide-scrollbar py-1"
+            >
+              {filteredCafes.map((cafe) => {
+                const isSelected = selectedCafe?._id === cafe._id;
+                const photo =
+                  cafe.photo ||
+                  cafe.photos?.[0] ||
+                  "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
+                const rating = cafe.rating ? Number(cafe.rating).toFixed(1) : "4.5";
+                const reviews = cafe.reviewCount || cafe.reviews?.length || 120;
 
-            {/* Recenter / Fit All button */}
-            <div className="absolute top-4 right-4 z-20">
-              <button
-                onClick={handleUseMyLocation}
-                title="Locate me"
-                className="w-9 h-9 rounded-xl bg-dark-card/90 backdrop-blur-md border border-white/10 flex items-center justify-center text-primary hover:bg-primary hover:text-black transition-all shadow-lg"
-              >
-                <Compass className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* ── Bottom Carousel of Cafe Cards ── */}
-            {filteredCafes.length > 0 && (
-              <div
-                ref={carouselRef}
-                className="absolute bottom-4 left-4 right-4 z-20 flex gap-3 overflow-x-auto hide-scrollbar py-1"
-              >
-                {filteredCafes.map((cafe) => {
-                  const isSelected = selectedCafe?._id === cafe._id;
-                  const photo =
-                    cafe.photo ||
-                    cafe.photos?.[0] ||
-                    "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
-                  const rating = cafe.rating ? Number(cafe.rating).toFixed(1) : "4.5";
-
-                  return (
-                    <motion.div
-                      id={`carousel-cafe-${cafe._id}`}
-                      key={cafe._id}
-                      onClick={() => handleSelectCafe(cafe)}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`cursor-pointer shrink-0 w-64 p-3 rounded-2xl glass transition-all ${
-                        isSelected
-                          ? "border-primary bg-dark-card shadow-2xl ring-2 ring-primary/40"
-                          : "border-white/10 bg-dark-card/85 hover:border-primary/40"
-                      }`}
-                    >
-                      <div className="flex gap-3 items-center">
-                        <img
-                          src={photo}
-                          alt={cafe.name}
-                          className="w-16 h-16 rounded-xl object-cover shrink-0"
-                          onError={(e) => {
-                            e.target.src =
-                              "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-bold text-white truncate">
-                            {cafe.name}
-                          </h4>
-                          <p className="text-xs text-primary font-medium truncate">
-                            {cafe.cuisine || "Cafe"}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-yellow-400 mt-1">
-                            <Star className="w-3 h-3 fill-current" />
-                            <span>{rating}</span>
-                            <span className="text-gray-400 text-[10px]">
-                              ({cafe.reviewCount || 120})
-                            </span>
-                          </div>
+                return (
+                  <motion.div
+                    id={`carousel-cafe-${cafe._id}`}
+                    key={cafe._id || cafe.osmId}
+                    onClick={() => handleSelectCafe(cafe)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={`cursor-pointer shrink-0 w-64 p-3 rounded-2xl glass transition-all ${
+                      isSelected
+                        ? "border-primary bg-dark-card shadow-2xl ring-2 ring-primary/40"
+                        : "border-white/10 bg-dark-card/85 hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="flex gap-3 items-center">
+                      <img
+                        src={photo}
+                        alt={cafe.name}
+                        className="w-16 h-16 rounded-xl object-cover shrink-0"
+                        onError={(e) => {
+                          e.target.src =
+                            "https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg";
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-bold text-white truncate">
+                          {cafe.name}
+                        </h4>
+                        <p className="text-xs text-primary font-medium truncate">
+                          {cafe.cuisine || "Cafe"}
+                        </p>
+                        <div className="flex items-center gap-1 text-xs text-yellow-400 mt-1">
+                          <Star className="w-3 h-3 fill-current" />
+                          <span>{rating}</span>
+                          <span className="text-gray-400 text-[10px]">
+                            ({reviews})
+                          </span>
                         </div>
                       </div>
-                      <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                        <span className="text-gray-400 truncate max-w-[150px]">
-                          {cafe.address || "Mumbai"}
-                        </span>
-                        <Link
-                          to={`/cafe/${cafe._id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-primary hover:underline font-semibold flex items-center gap-0.5"
-                        >
-                          Details <ChevronRight className="w-3 h-3" />
-                        </Link>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                      <span className="text-gray-400 truncate max-w-[150px]">
+                        {cafe.address || userLocationName}
+                      </span>
+                      <Link
+                        to={`/cafe/${cafe._id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:underline font-semibold flex items-center gap-0.5"
+                      >
+                        Details <ChevronRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          ) : !loading && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
+              <div className="glass px-5 py-2.5 rounded-2xl border border-white/10 text-center shadow-xl">
+                <p className="text-xs text-gray-300">
+                  No cafes found in this view. Try adjusting filters or searching another area.
+                </p>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

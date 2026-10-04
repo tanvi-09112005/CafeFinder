@@ -11,10 +11,14 @@ import {
   Navigation,
   Loader2,
   Map as MapIcon,
+  Send,
+  MessageSquarePlus,
+  Check,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { API } from "../config";
 import MapComponent from "../components/MapComponent";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function CafeDetail() {
   const { id } = useParams();
@@ -25,6 +29,51 @@ export default function CafeDetail() {
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("menu");
   const [callStatus, setCallStatus] = useState({ show: false, message: '' });
+
+  // Interactive review submission state
+  const { user } = useAuth();
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    try {
+      setSubmittingReview(true);
+      const res = await fetch(`${API}/api/cafes/${id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id || null,
+          userName: user?.name || "Coffee Lover",
+          userAvatar: user?.avatar || "",
+          rating: newRating,
+          text: newComment.trim()
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCafe(prev => ({
+          ...prev,
+          reviews: data.cafe?.reviews || [
+            { userName: user?.name || "You", rating: newRating, text: newComment.trim(), date: "Just now" },
+            ...(prev.reviews || [])
+          ],
+          rating: data.cafe?.rating || prev.rating,
+          reviewCount: data.cafe?.reviewCount || ((prev.reviewCount || 0) + 1)
+        }));
+        setNewComment("");
+        setReviewSuccess(true);
+        setTimeout(() => setReviewSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error("Error submitting review:", err);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   useEffect(() => {
     fetchCafeDetails();
@@ -358,85 +407,172 @@ export default function CafeDetail() {
         </motion.div>
 
         {/* Tab content */}
-        {activeTab === "menu" && cafe.menu && cafe.menu.length > 0 && (
+        {activeTab === "menu" && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
+            className="mb-8"
           >
-            {cafe.menu.map((item, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.08 }}
-                className="flex items-center gap-4 p-4 rounded-2xl bg-dark-card border border-dark-border hover:border-primary/30 transition-all group"
-              >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-16 h-16 rounded-xl object-cover group-hover:scale-105 transition-transform"
-                  onError={(e) => {
-                    e.target.src = "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg";
-                  }}
-                />
-                <div className="flex-1">
-                  <h4 className="font-medium text-white text-sm">{item.name}</h4>
-                  <p className="text-primary font-bold mt-1">
-                    ${item.price?.toFixed(2) || "0.00"}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
+            {cafe.menu && cafe.menu.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {cafe.menu.map((item, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: i * 0.05 }}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-dark-card border border-dark-border hover:border-primary/30 transition-all group"
+                  >
+                    <img
+                      src={item.image || "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg"}
+                      alt={item.name}
+                      className="w-16 h-16 rounded-xl object-cover group-hover:scale-105 transition-transform shrink-0"
+                      onError={(e) => {
+                        e.target.src = "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg";
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-semibold text-white text-sm truncate">{item.name}</h4>
+                        <span className="text-primary font-bold text-sm shrink-0">
+                          ₹{item.price || 180}
+                        </span>
+                      </div>
+                      {item.category && (
+                        <span className="inline-block text-[10px] text-gray-400 bg-white/5 px-2 py-0.5 rounded-md mt-1">
+                          {item.category}
+                        </span>
+                      )}
+                      {item.description && (
+                        <p className="text-xs text-gray-400 line-clamp-1 mt-1">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-8">Menu details being updated</p>
+            )}
           </motion.div>
         )}
 
-        {activeTab === "reviews" && cafe.reviews && cafe.reviews.length > 0 && (
+        {activeTab === "reviews" && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="space-y-4 mb-8"
+            className="space-y-5 mb-8"
           >
-            {cafe.reviews.map((review, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.1 }}
-                className="p-5 rounded-2xl bg-dark-card border border-dark-border"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                      {review.author?.[0] || "?"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">
-                        {review.author || "Anonymous"}
-                      </p>
-                      <p className="text-xs text-gray-500">{review.date || "Recently"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    {[...Array(5)].map((_, j) => (
-                      <Star
-                        key={j}
-                        className={`w-3.5 h-3.5 ${
-                          j < (review.rating || 5)
-                            ? "text-primary fill-primary"
-                            : "text-gray-600"
-                        }`}
-                      />
+            {/* Interactive Write a Review Card */}
+            <div className="p-5 rounded-2xl bg-dark-card border border-primary/20 shadow-xl">
+              <div className="flex items-center gap-2 mb-3">
+                <MessageSquarePlus className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-bold text-white">Share Your Experience</h3>
+              </div>
+              <form onSubmit={handleSubmitReview} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Rating:</span>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setNewRating(star)}
+                        className="text-lg p-0.5 hover:scale-110 transition-transform cursor-pointer"
+                      >
+                        <Star
+                          className={`w-5 h-5 ${
+                            star <= newRating
+                              ? "text-primary fill-primary"
+                              : "text-gray-600 hover:text-primary/60"
+                          }`}
+                        />
+                      </button>
                     ))}
                   </div>
+                  <span className="text-xs font-semibold text-primary ml-1">{newRating} / 5</span>
                 </div>
-                <p className="text-sm text-gray-400 leading-relaxed">
-                  {review.text || "Great place!"}
-                </p>
-              </motion.div>
-            ))}
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="How was the coffee, seating, wifi, or noise level?"
+                  rows={2}
+                  className="w-full bg-dark-surface border border-dark-border rounded-xl p-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-all resize-none"
+                  required
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Posting as {user?.name || "Guest"}</span>
+                  <button
+                    type="submit"
+                    disabled={submittingReview || !newComment.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-black font-semibold text-xs hover:bg-primary-light transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingReview ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : reviewSuccess ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" /> Posted!
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" /> Post Review
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Reviews List */}
+            {cafe.reviews && cafe.reviews.length > 0 ? (
+              <div className="space-y-4">
+                {cafe.reviews.map((review, i) => {
+                  const authorName = review.userName || review.author || "Coffee Lover";
+                  const initial = authorName[0]?.toUpperCase() || "C";
+                  return (
+                    <motion.div
+                      key={review._id || i}
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.05 }}
+                      className="p-5 rounded-2xl bg-dark-card border border-dark-border"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                            {initial}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">{authorName}</p>
+                            <p className="text-xs text-gray-500">{review.date || "Recently"}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          {[...Array(5)].map((_, j) => (
+                            <Star
+                              key={j}
+                              className={`w-3.5 h-3.5 ${
+                                j < (review.rating || 5)
+                                  ? "text-primary fill-primary"
+                                  : "text-gray-600"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-300 leading-relaxed pl-12">
+                        {review.text || "Great atmosphere and coffee!"}
+                      </p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-6">No reviews yet. Be the first to leave one!</p>
+            )}
           </motion.div>
         )}
 

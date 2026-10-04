@@ -1,26 +1,27 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Tag, Clock, Sparkles, Coffee, X, Smartphone, CheckCircle, MapPin, ShieldAlert, LogIn } from "lucide-react";
+import {
+  Tag, Clock, Sparkles, Coffee, X, Smartphone, CheckCircle,
+  MapPin, ShieldAlert, LogIn, Copy, Check, QrCode, Map as MapIcon
+} from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { API } from "../config";
 
-const TIMER_DURATION = 180; // 3 minutes
+const TIMER_DURATION = 900; // 15 minutes (practical counter ordering window)
 
 /* ==============================
-   Barista Modal
-   Timer is driven by expiresAt from the server — not local state.
-   So it survives close/reopen and even page refresh.
+   Barista Voucher Modal
+   Practical 15-minute redemption window with scannable voucher and code
 ============================== */
 function BaristaModal({ deal, redemptionInfo, onClose }) {
-  // expiresAt comes from server on first claim, or from DB on reopen
   const expiresAt = new Date(redemptionInfo.expiresAt);
-
   const calcRemaining = () => Math.max(Math.floor((expiresAt - new Date()) / 1000), 0);
 
   const [seconds, setSeconds] = useState(calcRemaining);
   const [expired, setExpired] = useState(() => calcRemaining() <= 0);
-  const [screenshotWarning, setScreenshotWarning] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [redeemed, setRedeemed] = useState(false);
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -36,63 +37,36 @@ function BaristaModal({ deal, redemptionInfo, onClose }) {
     return () => clearInterval(intervalRef.current);
   }, [expired]);
 
-  // iOS screenshot detection
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        setScreenshotWarning(true);
-        setTimeout(() => setScreenshotWarning(false), 2500);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+  const handleCopyCode = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(deal.code || "CAFEFINDER");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
   const secs = String(seconds % 60).padStart(2, "0");
-  const progress = seconds / TIMER_DURATION;
-  const borderColor = seconds > 90 ? "#4ade80" : seconds > 45 ? "#facc15" : "#f87171";
+  const progress = Math.min(Math.max(seconds / TIMER_DURATION, 0), 1);
+  const borderColor = seconds > 300 ? "#4ade80" : seconds > 90 ? "#facc15" : "#f87171";
+  const voucherPin = redemptionInfo.verificationPin || `${deal.code || "CF"}-7489`;
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
-      onContextMenu={e => e.preventDefault()}
-      style={{ WebkitTouchCallout: "none", userSelect: "none" }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
       onClick={onClose}
     >
-      {/* Screenshot warning */}
-      <AnimatePresence>
-        {screenshotWarning && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/95"
-            style={{ backdropFilter: "blur(40px)" }}
-          >
-            <ShieldAlert className="w-16 h-16 text-red-400 mb-4" />
-            <p className="text-white font-bold text-xl mb-2">Screenshots not allowed</p>
-            <p className="text-gray-400 text-sm text-center px-8">
-              This offer is tied to your account. Screenshots cannot be reused.
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <motion.div
-        initial={{ scale: 0.85, opacity: 0, y: 40 }}
+        initial={{ scale: 0.88, opacity: 0, y: 30 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.85, opacity: 0 }}
+        exit={{ scale: 0.88, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-        onClick={e => e.stopPropagation()}
-        className="w-full max-w-sm rounded-3xl overflow-hidden relative"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-3xl overflow-hidden relative bg-dark-card border border-dark-border shadow-2xl"
         style={{
-          background: "linear-gradient(145deg, #0f0f0f, #1a1a1a)",
-          boxShadow: `0 0 0 2px ${borderColor}, 0 0 40px ${borderColor}40`,
-          transition: "box-shadow 1s ease",
-          WebkitUserSelect: "none",
-          userSelect: "none",
+          boxShadow: `0 0 35px ${borderColor}30`,
         }}
       >
         {/* Progress bar */}
@@ -105,67 +79,96 @@ function BaristaModal({ deal, redemptionInfo, onClose }) {
           />
         </div>
 
-        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all z-10">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all z-10"
+        >
           <X className="w-4 h-4 text-white" />
         </button>
 
-        <div className="px-6 pt-6 pb-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Smartphone className="w-4 h-4 text-gray-400" />
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">Show to Barista</p>
+        {/* Modal Header */}
+        <div className="px-6 pt-6 pb-2 text-center">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-bold uppercase tracking-wider mb-2">
+            <Smartphone className="w-3.5 h-3.5" /> Digital Barista Pass
           </div>
-          <p className="text-xs text-gray-600">Present this screen at the counter</p>
+          <h2 className="text-xl font-bold text-white">{deal.title}</h2>
+          <p className="text-xs text-gray-400 mt-1">{deal.cafeName}</p>
         </div>
 
-        <div className="mx-6 rounded-2xl overflow-hidden h-36 mb-5">
-          <img
-            src={deal.image} alt={deal.title}
-            className="w-full h-full object-cover"
-            draggable={false}
-            style={{ pointerEvents: "none", WebkitUserDrag: "none" }}
-          />
+        {/* Voucher Code Box with 1-click Copy */}
+        <div className="mx-6 my-4 p-4 rounded-2xl bg-dark-surface border border-primary/30 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold block">Voucher Code</span>
+            <span className="text-xl font-mono font-extrabold text-primary tracking-wider">{deal.code || "BOGO50"}</span>
+          </div>
+          <button
+            onClick={handleCopyCode}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-primary text-black font-semibold text-xs hover:bg-primary-light transition-all cursor-pointer"
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
         </div>
 
-        <div className="px-6 pb-2 text-center">
-          <div className="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-3"
-            style={{ backgroundColor: `${borderColor}20`, color: borderColor, border: `1px solid ${borderColor}40` }}>
-            {deal.discountLabel || `${deal.discount}% OFF`}
+        {/* Scannable Barcode / QR Visual */}
+        <div className="mx-6 p-4 rounded-2xl bg-white flex flex-col items-center justify-center text-black">
+          {/* Simulated clean barcode pattern */}
+          <div className="flex items-center justify-center gap-1 w-full h-10 mb-1.5 px-4 overflow-hidden">
+            {[4, 2, 6, 1, 3, 5, 2, 7, 3, 1, 4, 6, 2, 3, 5, 1, 6, 3, 2, 4, 6, 2, 5, 1, 3, 6, 2].map((w, idx) => (
+              <div key={idx} className="bg-black h-full rounded-sm" style={{ width: `${w * 1.5}px` }} />
+            ))}
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">{deal.title}</h2>
-          <p className="text-sm text-gray-400 mb-1">{deal.description}</p>
-          <div className="flex items-center justify-center gap-1.5 mt-2">
-            <MapPin className="w-3.5 h-3.5 text-primary" />
-            <p className="text-sm font-semibold text-primary">{deal.cafeName}</p>
-          </div>
+          <span className="text-xs font-mono font-bold tracking-widest text-gray-800">
+            PIN: {voucherPin}
+          </span>
+          <span className="text-[10px] text-gray-500">Scan or enter code at checkout</span>
         </div>
 
-        <div className="mx-6 my-5 border-t border-dashed border-gray-700" />
-
-        <div className="px-6 pb-6 text-center">
-          {!expired ? (
+        {/* Timer Display */}
+        <div className="px-6 py-4 text-center">
+          {!expired && !redeemed ? (
             <>
-              <p className="text-xs text-gray-500 mb-2 uppercase tracking-widest">Expires in</p>
-              <motion.div
-                animate={{ scale: seconds <= 30 ? [1, 1.05, 1] : 1 }}
-                transition={{ duration: 0.3 }}
-                className="text-5xl font-mono font-bold tabular-nums"
+              <p className="text-[11px] text-gray-400 mb-1 uppercase tracking-wider">Valid for ordering</p>
+              <div
+                className="text-4xl font-mono font-bold tabular-nums"
                 style={{ color: borderColor }}
               >
                 {mins}:{secs}
-              </motion.div>
-              <p className="text-xs text-gray-600 mt-2">Valid until {deal.validUntil}</p>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">15-minute counter activation</p>
             </>
+          ) : redeemed ? (
+            <div className="py-2 text-emerald-400">
+              <CheckCircle className="w-8 h-8 mx-auto mb-1" />
+              <p className="font-bold text-sm">Voucher Applied Successfully!</p>
+              <p className="text-xs text-gray-400 mt-0.5">Enjoy your coffee & snack</p>
+            </div>
           ) : (
-            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="py-2">
-              <p className="text-red-400 font-bold text-lg">This session expired</p>
-              <p className="text-gray-500 text-xs mt-1">This deal can no longer be redeemed</p>
-            </motion.div>
+            <div className="py-2 text-red-400">
+              <p className="font-bold text-sm">Session Expired</p>
+              <p className="text-xs text-gray-500 mt-0.5">You can re-claim this deal if uses remain</p>
+            </div>
           )}
         </div>
 
-        <div className="mx-6 mb-6 p-3 rounded-2xl bg-white/5 flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-          <p className="text-xs text-gray-400">One use per account. Show this screen before ordering.</p>
+        {/* Action Buttons */}
+        <div className="p-4 bg-dark-surface/50 border-t border-dark-border flex gap-2">
+          <Link
+            to="/map"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-dark-border text-xs font-semibold text-gray-300 hover:text-white hover:border-primary/40 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <MapIcon className="w-3.5 h-3.5 text-primary" /> Find on Map
+          </Link>
+
+          {!redeemed && !expired && (
+            <button
+              onClick={() => setRedeemed(true)}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-black text-xs font-bold hover:bg-emerald-400 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <CheckCircle className="w-3.5 h-3.5" /> Mark as Used
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -255,10 +258,16 @@ function DealCard({ deal, index, userId }) {
               <span className="text-xs text-white">{deal.distanceKm} km</span>
             </div>
           )}
-          <div className="absolute bottom-3 left-3">
-            <span className="text-xs text-primary font-semibold bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full">
+          <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+            <span className="text-xs text-primary font-semibold bg-black/70 backdrop-blur-sm px-3 py-1 rounded-full truncate max-w-[170px]">
               {deal.cafeName}
             </span>
+            <Link
+              to="/map"
+              className="text-[11px] font-bold bg-primary text-black hover:bg-primary-light px-2.5 py-1 rounded-full flex items-center gap-1 transition-all shadow-md"
+            >
+              <MapIcon className="w-3 h-3" /> Map
+            </Link>
           </div>
         </div>
 

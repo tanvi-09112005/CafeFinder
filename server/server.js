@@ -60,6 +60,24 @@ const cafeSchema = new mongoose.Schema({
   photos: [String],
   description: String,
   tags: [String],
+  rating: { type: Number, default: 4.5 },
+  reviewCount: { type: Number, default: 0 },
+  menu: [{
+    name: String,
+    price: Number,
+    category: String,
+    description: String,
+    image: String
+  }],
+  reviews: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userName: String,
+    userAvatar: String,
+    rating: Number,
+    text: String,
+    date: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
   lastUpdated: { type: Date, default: Date.now }
 });
 cafeSchema.index({ location: "2dsphere" });
@@ -365,23 +383,51 @@ app.post("/api/deals/:id/redeem", async (req, res) => {
     if (!deal) return res.status(404).json({ error: "Deal not found" });
     if (deal.usedCount >= deal.maxUses) return res.status(400).json({ error: "Deal fully redeemed" });
 
+    // Practical 15-minute barista redemption window
+    const REDEEM_WINDOW_MS = 15 * 60 * 1000;
+    const pin = deal.code ? `${deal.code.slice(0, 3)}-${(deal._id.toString().slice(-4)).toUpperCase()}` : "CF-2026";
+
     if (userId) {
       const existing = await Redemption.findOne({ userId, dealId });
       if (existing) {
         const secondsLeft = Math.max(Math.floor((new Date(existing.expiresAt) - new Date()) / 1000), 0);
-        return res.json({ success: true, alreadyClaimed: true, claimedAt: existing.claimedAt, expiresAt: existing.expiresAt, secondsLeft });
+        return res.json({
+          success: true,
+          alreadyClaimed: true,
+          claimedAt: existing.claimedAt,
+          expiresAt: existing.expiresAt,
+          secondsLeft,
+          code: deal.code,
+          verificationPin: pin
+        });
       }
       const claimedAt = new Date();
-      const expiresAt = new Date(claimedAt.getTime() + 3 * 60 * 1000);
+      const expiresAt = new Date(claimedAt.getTime() + REDEEM_WINDOW_MS);
       await Redemption.create({ userId, dealId, claimedAt, expiresAt });
       deal.usedCount += 1;
       await deal.save();
-      return res.json({ success: true, alreadyClaimed: false, claimedAt, expiresAt, secondsLeft: 180, remaining: deal.maxUses - deal.usedCount });
+      return res.json({
+        success: true,
+        alreadyClaimed: false,
+        claimedAt,
+        expiresAt,
+        secondsLeft: 900,
+        remaining: deal.maxUses - deal.usedCount,
+        code: deal.code,
+        verificationPin: pin
+      });
     }
 
     deal.usedCount += 1;
     await deal.save();
-    res.json({ success: true, alreadyClaimed: false, secondsLeft: 180, remaining: deal.maxUses - deal.usedCount });
+    res.json({
+      success: true,
+      alreadyClaimed: false,
+      secondsLeft: 900,
+      remaining: deal.maxUses - deal.usedCount,
+      code: deal.code,
+      verificationPin: pin
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -438,6 +484,70 @@ async function fetchCafesFromOSM(lat, lon) {
 }
 
 /* ==============================
+   Dynamic Menu Generator
+============================== */
+function generateDynamicMenu(cuisine = "", cafeName = "", index = 0) {
+  const isBakery = (cuisine || "").toLowerCase().includes("bake") || (cafeName || "").toLowerCase().includes("bake");
+  const isBrunch = (cuisine || "").toLowerCase().includes("brunch") || (cafeName || "").toLowerCase().includes("bistro");
+
+  const coffeeItems = [
+    { name: "Single Origin Espresso", price: 140, category: "Hot Brews", description: "Rich double shot with caramel crema and balanced chocolate notes", image: "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg" },
+    { name: "Velvet Cappuccino", price: 190, category: "Hot Brews", description: "Steamed textured whole milk over dark espresso roast", image: "https://images.pexels.com/photos/29951/pexels-photo-29951.jpg" },
+    { name: "Vanilla Bean Oat Latte", price: 230, category: "Hot Brews", description: "Smooth espresso paired with creamy oat milk and organic vanilla", image: "https://images.pexels.com/photos/461064/pexels-photo-461064.jpeg" },
+    { name: "Signature 18-hr Cold Brew", price: 220, category: "Cold Refreshers", description: "Slow steeped for a naturally sweet, low-acidity refreshing profile", image: "https://images.pexels.com/photos/312418/pexels-photo-312418.jpeg" },
+    { name: "Iced Caramel Cloud Macchiato", price: 250, category: "Cold Refreshers", description: "Layered espresso with cold foam and golden caramel drizzle", image: "https://images.pexels.com/photos/260922/pexels-photo-260922.jpeg" },
+  ];
+
+  const bakeryItems = [
+    { name: "French Butter Croissant", price: 160, category: "Bakery & Desserts", description: "Golden, freshly baked 24-layer flaky pastry", image: "https://images.pexels.com/photos/1309766/pexels-photo-1309766.jpeg" },
+    { name: "Dark Chocolate Babka", price: 210, category: "Bakery & Desserts", description: "Braided brioche infused with 70% dark Belgian cocoa", image: "https://images.pexels.com/photos/2347311/pexels-photo-2347311.jpeg" },
+    { name: "Warm Blueberry Crumble Muffin", price: 180, category: "Bakery & Desserts", description: "Packed with wild blueberries and topped with spiced crumble", image: "https://images.pexels.com/photos/757520/pexels-photo-757520.jpeg" },
+  ];
+
+  const savoryItems = [
+    { name: "Avocado & Feta Sourdough", price: 290, category: "Gourmet Bites", description: "Hass avocado, cherry tomatoes, and microgreens on toasted sourdough", image: "https://images.pexels.com/photos/1351238/pexels-photo-1351238.jpeg" },
+    { name: "Grilled Pesto & Mozzarella Panini", price: 270, category: "Gourmet Bites", description: "Sun-dried tomatoes, basil pesto, and molten fresh mozzarella", image: "https://images.pexels.com/photos/1603901/pexels-photo-1603901.jpeg" },
+  ];
+
+  if (isBakery) {
+    return [...bakeryItems, ...coffeeItems.slice(0, 3), savoryItems[0]];
+  }
+  if (isBrunch) {
+    return [...savoryItems, ...coffeeItems.slice(0, 3), bakeryItems[0]];
+  }
+  return [...coffeeItems, ...bakeryItems.slice(0, 2), ...savoryItems];
+}
+
+/* ==============================
+   Dynamic Initial Reviews
+============================== */
+function generateInitialReviews(cafeName = "", cuisine = "", index = 0) {
+  const reviewerPool = [
+    { name: "Aarav Sharma", rating: 5, comment: "Top-notch specialty roast! High-speed WiFi and plenty of laptop plug points." },
+    { name: "Pooja Mehta", rating: 5, comment: "Cozy aesthetic, lovely playlist, and their freshly baked croissants are fantastic." },
+    { name: "Rohan Varma", rating: 4, comment: "Great spot for afternoon study sessions. The cold brew is solid and staff is super welcoming." },
+    { name: "Ananya Desai", rating: 5, comment: "One of my go-to cafes in the area. Peaceful seating and consistent quality." },
+    { name: "Kabir Sengupta", rating: 4, comment: "Good ambiance, outdoor seating is very relaxing around sunset. Recommended!" }
+  ];
+
+  const shift = (index || 0) % reviewerPool.length;
+  const selected = [
+    reviewerPool[shift % reviewerPool.length],
+    reviewerPool[(shift + 1) % reviewerPool.length],
+    reviewerPool[(shift + 2) % reviewerPool.length],
+  ];
+
+  return selected.map((rev, i) => ({
+    userName: rev.name,
+    userAvatar: "",
+    rating: rev.rating,
+    text: rev.comment,
+    date: `${(i + 1) * 2} days ago`,
+    createdAt: new Date(Date.now() - (i + 1) * 2 * 24 * 60 * 60 * 1000)
+  }));
+}
+
+/* ==============================
    Format OSM Data
 ============================== */
 function formatCafeData(osmElement, index) {
@@ -466,9 +576,16 @@ function formatCafeData(osmElement, index) {
     "https://images.pexels.com/photos/757520/pexels-photo-757520.jpeg",
     "https://images.pexels.com/photos/29951/pexels-photo-29951.jpg",
   ];
+
+  const cafeName = tags.name || "Local Cafe";
+  const cuisineType = tags.cuisine || "Coffee & Snacks";
+  const initialMenu = generateDynamicMenu(cuisineType, cafeName, index);
+  const initialReviews = generateInitialReviews(cafeName, cuisineType, index);
+  const avgRating = Math.round((initialReviews.reduce((sum, r) => sum + r.rating, 0) / initialReviews.length) * 10) / 10;
+
   return {
     osmId: osmElement.id,
-    name: tags.name || "Local Cafe",
+    name: cafeName,
     location: { type: "Point", coordinates: [lon, lat] },
     address: tags["addr:street"]
       ? `${tags["addr:housenumber"] || ""} ${tags["addr:street"]}`.trim()
@@ -476,7 +593,7 @@ function formatCafeData(osmElement, index) {
     phone: tags.phone || tags["contact:phone"] || "Not available",
     website: tags.website || tags["contact:website"] || "",
     openingHours: tags.opening_hours || "Hours vary",
-    cuisine: tags.cuisine || "Coffee & Snacks",
+    cuisine: cuisineType,
     wheelchair: tags.wheelchair || "unknown",
     outdoor: tags.outdoor_seating === "yes",
     wifi: tags.wifi === "yes" || tags["internet_access"] === "wlan",
@@ -488,7 +605,11 @@ function formatCafeData(osmElement, index) {
       pexelsImages[(index * 5) % pexelsImages.length],
     ],
     description: descriptions[index % descriptions.length],
-    tags: amenityTags
+    tags: amenityTags,
+    rating: avgRating,
+    reviewCount: initialReviews.length + 18,
+    menu: initialMenu,
+    reviews: initialReviews
   };
 }
 
@@ -600,18 +721,64 @@ app.get("/api/cafes/:id", async (req, res) => {
   try {
     const cafe = await Cafe.findById(req.params.id);
     if (!cafe) return res.status(404).json({ error: "Cafe not found" });
-    const mockReviews = [
-      { author: "Sarah M.", rating: 5, text: "Absolutely love this place! The coffee is always perfect and the ambiance is unmatched.", date: "2 days ago" },
-      { author: "Alex K.", rating: 4, text: "Great selection and friendly staff. Gets a bit crowded on weekends but worth it!", date: "1 week ago" },
-      { author: "Jamie L.", rating: 5, text: "Best coffee in the area! The interior is beautiful and perfect for remote work.", date: "2 weeks ago" }
-    ];
-    const mockMenu = [
-      { name: "Espresso", price: 3.50, image: "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg" },
-      { name: "Cappuccino", price: 4.50, image: "https://images.pexels.com/photos/29951/pexels-photo-29951.jpg" },
-      { name: "Latte", price: 4.75, image: "https://images.pexels.com/photos/461064/pexels-photo-461064.jpeg" },
-      { name: "Croissant", price: 3.25, image: "https://images.pexels.com/photos/1309766/pexels-photo-1309766.jpeg" }
-    ];
-    res.json({ ...cafe.toObject(), reviews: mockReviews, menu: mockMenu, rating: 4.5, reviewCount: 127 });
+
+    let needsSave = false;
+    if (!cafe.menu || cafe.menu.length === 0) {
+      cafe.menu = generateDynamicMenu(cafe.cuisine, cafe.name, 1);
+      needsSave = true;
+    }
+    if (!cafe.reviews || cafe.reviews.length === 0) {
+      cafe.reviews = generateInitialReviews(cafe.name, cafe.cuisine, 1);
+      const avg = Math.round((cafe.reviews.reduce((s, r) => s + r.rating, 0) / cafe.reviews.length) * 10) / 10;
+      cafe.rating = avg;
+      cafe.reviewCount = cafe.reviews.length + 15;
+      needsSave = true;
+    }
+
+    if (needsSave) {
+      await cafe.save();
+    }
+
+    res.json(cafe);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ==============================
+   Post Review for a Cafe
+============================== */
+app.post("/api/cafes/:id/reviews", async (req, res) => {
+  try {
+    const { userId, userName, userAvatar, rating, text } = req.body;
+    if (!rating || !text) return res.status(400).json({ error: "Rating and review text are required" });
+
+    const cafe = await Cafe.findById(req.params.id);
+    if (!cafe) return res.status(404).json({ error: "Cafe not found" });
+
+    const reviewObj = {
+      userId: userId || null,
+      userName: userName || "Coffee Lover",
+      userAvatar: userAvatar || "",
+      rating: Math.min(5, Math.max(1, Number(rating))),
+      text: text.trim(),
+      date: "Just now",
+      createdAt: new Date()
+    };
+
+    if (!Array.isArray(cafe.reviews)) cafe.reviews = [];
+    cafe.reviews.unshift(reviewObj);
+
+    const sum = cafe.reviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+    cafe.rating = Math.round((sum / cafe.reviews.length) * 10) / 10;
+    cafe.reviewCount = cafe.reviews.length + 15;
+    await cafe.save();
+
+    if (userId) {
+      await User.findByIdAndUpdate(userId, { $inc: { reviews: 1 } });
+    }
+
+    res.json({ message: "Review posted successfully", cafe });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
