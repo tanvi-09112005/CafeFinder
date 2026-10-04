@@ -476,28 +476,23 @@ async function geocodeLocation(location) {
 }
 
 /* ==============================
-   Fetch Cafes from OSM
+   Fetch Cafes from OSM (Fast Node Query)
 ============================== */
 async function fetchCafesFromOSM(lat, lon) {
-  const delta = 0.065; // ~7-8 km radius covering wider city hubs
+  const delta = 0.035; // ~3.5-4 km radius for fast responsive queries
   const query = `
-    [out:json][timeout:25];
+    [out:json][timeout:8];
     (
       node["amenity"="cafe"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
-      way["amenity"="cafe"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
       node["shop"="coffee"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
-      way["shop"="coffee"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
       node["shop"="bakery"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
-      way["shop"="bakery"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
-      node["shop"="tea"](${lat - delta},${lon - delta},${lat + delta},${lon + delta});
     );
-    out body center 75;
+    out body 50;
   `;
 
   const endpoints = [
-    "https://lz4.overpass-api.de/api/interpreter",
     "https://overpass-api.de/api/interpreter",
-    "https://z.overpass-api.de/api/interpreter"
+    "https://lz4.overpass-api.de/api/interpreter"
   ];
 
   for (const ep of endpoints) {
@@ -505,15 +500,15 @@ async function fetchCafesFromOSM(lat, lon) {
       const response = await axios.post(ep, query, {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "CafeFinderAcademicApp/2.0 (academic open source lab)"
+          "User-Agent": "CafeFinderAcademicApp/2.0 (open source lab)"
         },
-        timeout: 12000
+        timeout: 4000
       });
       if (Array.isArray(response.data?.elements) && response.data.elements.length > 0) {
         return response.data.elements;
       }
     } catch (err) {
-      console.warn(`Overpass endpoint ${ep} failed:`, err.message);
+      // Endpoint busy/rate-limited - proceed silently to next mirror or fallback
     }
   }
   return [];
@@ -856,22 +851,27 @@ app.get("/api/cafes/coordinates", async (req, res) => {
     if (isDbConnected) {
       try {
         existingCafes = await Cafe.find({
-          location: { $near: { $geometry: { type: "Point", coordinates: [longitude, latitude] }, $maxDistance: 12000 } }
-        }).limit(100);
+          location: { $near: { $geometry: { type: "Point", coordinates: [longitude, latitude] }, $maxDistance: 25000 } }
+        }).limit(60);
       } catch (dbErr) {
         console.warn("MongoDB find error:", dbErr.message);
       }
     }
 
-    if (existingCafes.length >= 20) {
+    // If database already has cafes for this region, return immediately without touching Overpass!
+    if (existingCafes.length > 0) {
+      const cafesToReturn = existingCafes.length < 8
+        ? [...existingCafes, ...SEEDED_CAFES]
+        : existingCafes;
+      const unique = Array.from(new Map(cafesToReturn.map(c => [c.name?.toLowerCase(), c])).values());
       return res.json({
         location: "Your Location",
         coordinates: { lat: latitude, lon: longitude },
-        cafes: existingCafes.map((c, i) => healCafeDocument(c, i))
+        cafes: unique.map((c, i) => healCafeDocument(c, i))
       });
     }
 
-    // Fetch from OSM Overpass with multi-mirrors
+    // Only query Overpass if DB has 0 cafes for this location
     const osmCafes = await fetchCafesFromOSM(latitude, longitude);
     const formatted = osmCafes.filter(c => c.lat || c.center?.lat).map((c, i) => formatCafeData(c, i, "Your Location"));
 
@@ -881,8 +881,8 @@ app.get("/api/cafes/coordinates", async (req, res) => {
           updateOne: { filter: { osmId: cafe.osmId }, update: { $setOnInsert: cafe }, upsert: true }
         })));
         const updated = await Cafe.find({
-          location: { $near: { $geometry: { type: "Point", coordinates: [longitude, latitude] }, $maxDistance: 12000 } }
-        }).limit(100);
+          location: { $near: { $geometry: { type: "Point", coordinates: [longitude, latitude] }, $maxDistance: 25000 } }
+        }).limit(60);
         return res.json({
           location: "Your Location",
           coordinates: { lat: latitude, lon: longitude },
@@ -893,8 +893,8 @@ app.get("/api/cafes/coordinates", async (req, res) => {
       }
     }
 
-    // Merge OSM formatted with SEEDED_CAFES as bulletproof fallback
-    const merged = [...formatted, ...existingCafes, ...SEEDED_CAFES].map((c, i) => healCafeDocument(c, i));
+    // Resilient fallback pool
+    const merged = [...formatted, ...SEEDED_CAFES].map((c, i) => healCafeDocument(c, i));
     const unique = Array.from(new Map(merged.map(c => [c.name?.toLowerCase(), c])).values());
 
     res.json({ location: "Your Location", coordinates: { lat: latitude, lon: longitude }, cafes: unique });
@@ -931,22 +931,27 @@ app.get("/api/cafes", async (req, res) => {
     if (isDbConnected) {
       try {
         existingCafes = await Cafe.find({
-          location: { $near: { $geometry: { type: "Point", coordinates: [lon, lat] }, $maxDistance: 12000 } }
-        }).limit(100);
+          location: { $near: { $geometry: { type: "Point", coordinates: [lon, lat] }, $maxDistance: 25000 } }
+        }).limit(60);
       } catch (dbErr) {
         console.warn("MongoDB find error:", dbErr.message);
       }
     }
 
-    if (existingCafes.length >= 25) {
+    // If database already has cafes for this region, return immediately without touching Overpass!
+    if (existingCafes.length > 0) {
+      const cafesToReturn = existingCafes.length < 8
+        ? [...existingCafes, ...SEEDED_CAFES]
+        : existingCafes;
+      const unique = Array.from(new Map(cafesToReturn.map(c => [c.name?.toLowerCase(), c])).values());
       return res.json({
         location: displayName,
         coordinates: { lat, lon },
-        cafes: existingCafes.map((c, i) => healCafeDocument(c, i))
+        cafes: unique.map((c, i) => healCafeDocument(c, i))
       });
     }
 
-    // Fetch from OSM Overpass with multi-mirrors
+    // Only query Overpass if DB has 0 cafes for this location
     const osmCafes = await fetchCafesFromOSM(lat, lon);
     const formatted = osmCafes.filter(c => c.lat || c.center?.lat).map((c, i) => formatCafeData(c, i, location));
 
@@ -956,8 +961,8 @@ app.get("/api/cafes", async (req, res) => {
           updateOne: { filter: { osmId: cafe.osmId }, update: { $setOnInsert: cafe }, upsert: true }
         })));
         const updated = await Cafe.find({
-          location: { $near: { $geometry: { type: "Point", coordinates: [lon, lat] }, $maxDistance: 12000 } }
-        }).limit(100);
+          location: { $near: { $geometry: { type: "Point", coordinates: [lon, lat] }, $maxDistance: 25000 } }
+        }).limit(60);
         return res.json({
           location: displayName,
           coordinates: { lat, lon },
@@ -968,8 +973,8 @@ app.get("/api/cafes", async (req, res) => {
       }
     }
 
-    // Merge OSM formatted with existing and SEEDED_CAFES as bulletproof fallback
-    const merged = [...formatted, ...existingCafes, ...SEEDED_CAFES].map((c, i) => healCafeDocument(c, i));
+    // Resilient fallback pool
+    const merged = [...formatted, ...SEEDED_CAFES].map((c, i) => healCafeDocument(c, i));
     const unique = Array.from(new Map(merged.map(c => [c.name?.toLowerCase(), c])).values());
 
     res.json({ location: displayName, coordinates: { lat, lon }, cafes: unique });
