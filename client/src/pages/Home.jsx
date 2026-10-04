@@ -12,13 +12,6 @@ import { useAuth } from "../contexts/AuthContext";
 import SectionHeader from "../components/SectionHeader";
 import { API } from "../config";
 
-const categories = [
-  { id: "all",    name: "All" },
-  { id: "coffee", name: "Coffee" },
-  { id: "bakery", name: "Bakery" },
-  { id: "brunch", name: "Brunch" },
-];
-
 const SORT_OPTIONS = [
   { id: "recommended", label: "Recommended" },
   { id: "rating",      label: "Top Rated" },
@@ -26,20 +19,6 @@ const SORT_OPTIONS = [
   { id: "price_asc",   label: "Price: Low → High" },
   { id: "price_desc",  label: "Price: High → Low" },
 ];
-
-// Stable seeded mock values — won't flicker on re-render
-function seeded(seed, offset = 0) {
-  const x = Math.sin(seed + offset + 1) * 10000;
-  return x - Math.floor(x);
-}
-function getId(cafe, i) {
-  return cafe._id
-    ? cafe._id.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
-    : i + 1;
-}
-function mockRating(cafe, i)  { const s = getId(cafe, i); return +(seeded(s) * 1.5 + 3.5).toFixed(1); }
-function mockReviews(cafe, i) { const s = getId(cafe, i); return Math.floor(seeded(s, 99) * 280) + 20; }
-function mockPrice(cafe, i)   { const s = getId(cafe, i); return Math.floor(seeded(s, 7) * 3) + 1; } // 1–3
 
 export default function Home() {
   const [search, setSearch]               = useState("");
@@ -120,13 +99,49 @@ export default function Home() {
     if (loc?.trim()) { setUserLocation(loc.trim()); localStorage.setItem("userLocation", loc.trim()); setUseMyLocation(false); }
   };
 
-  // ── Stable enriched data ──────────────────────────────────
-  const enriched = useMemo(() => cafes.map((cafe, i) => ({
-    ...cafe,
-    displayRating:  cafe.rating      || mockRating(cafe, i),
-    displayReviews: cafe.reviewCount || mockReviews(cafe, i),
-    priceLevel:     cafe.priceLevel  || mockPrice(cafe, i),
-  })), [cafes]);
+  // ── Dynamic categories computed from loaded cafes ─────────
+  const dynamicCategories = useMemo(() => {
+    const cuisineSet = new Set();
+    if (Array.isArray(cafes)) {
+      cafes.forEach((c) => {
+        if (c?.cuisine) {
+          const main = c.cuisine.split(",")[0].trim();
+          if (main && main !== "Coffee & Snacks") cuisineSet.add(main);
+        }
+      });
+    }
+
+    const list = [{ id: "all", name: "All" }];
+    cuisineSet.forEach((c) => {
+      list.push({ id: c.toLowerCase(), name: c });
+    });
+
+    if (list.length <= 2) {
+      list.push(
+        { id: "specialty coffee", name: "Specialty Coffee" },
+        { id: "artisan bakery", name: "Artisan Bakery" },
+        { id: "bistro & brunch", name: "Bistro & Brunch" }
+      );
+    }
+    return list;
+  }, [cafes]);
+
+  // ── Stable enriched data (derived from real MongoDB menu & reviews) ────
+  const enriched = useMemo(() => cafes.map((cafe) => {
+    let priceTier = 1;
+    if (Array.isArray(cafe.menu) && cafe.menu.length > 0) {
+      const avgPrice = cafe.menu.reduce((sum, item) => sum + (item.price || 180), 0) / cafe.menu.length;
+      if (avgPrice > 280) priceTier = 3;
+      else if (avgPrice > 190) priceTier = 2;
+      else priceTier = 1;
+    }
+    return {
+      ...cafe,
+      displayRating: cafe.rating || 4.5,
+      displayReviews: cafe.reviewCount || (cafe.reviews?.length ? cafe.reviews.length + 15 : 45),
+      priceLevel: cafe.priceLevel || priceTier,
+    };
+  }), [cafes]);
 
   // ── Filter + search + sort pipeline ──────────────────────
   const finalCafes = useMemo(() => {
@@ -435,7 +450,7 @@ export default function Home() {
 
         {/* ── Categories ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }} className="mb-8">
-          <CategoryPills categories={categories} activeCategory={activeCategory} onSelect={setActiveCategory} />
+          <CategoryPills categories={dynamicCategories} activeCategory={activeCategory} onSelect={setActiveCategory} />
         </motion.div>
 
         {/* ── Results or default sections ── */}

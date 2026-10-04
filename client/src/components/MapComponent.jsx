@@ -119,11 +119,13 @@ export default function MapComponent({
         attributionControl: true,
       });
 
-      // OpenStreetMap free tile provider
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      // High-performance OpenStreetMap CartoDB Voyager tile provider
+      // Fast, global CDN, never rate-limits browsers, and beautifully styled
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd",
         maxZoom: 19,
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
       }).addTo(map);
 
       const markersGroup = L.layerGroup().addTo(map);
@@ -140,12 +142,21 @@ export default function MapComponent({
       };
       container.addEventListener("click", handlePopupClick);
 
-      // Force recalculate dimensions once layout settles
-      const resizeTimer = setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
-      }, 250);
+      // ResizeObserver: auto-detects whenever map container expands or renders
+      let resizeObserver = null;
+      if (typeof ResizeObserver !== "undefined") {
+        resizeObserver = new ResizeObserver(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        });
+        resizeObserver.observe(container);
+      }
+
+      // Staggered size invalidations to ensure zero black flash
+      const t1 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 100);
+      const t2 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 400);
+      const t3 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 1000);
 
       // Window resize listener
       const handleWindowResize = () => {
@@ -156,7 +167,10 @@ export default function MapComponent({
       window.addEventListener("resize", handleWindowResize);
 
       return () => {
-        clearTimeout(resizeTimer);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        if (resizeObserver) resizeObserver.disconnect();
         window.removeEventListener("resize", handleWindowResize);
         container.removeEventListener("click", handlePopupClick);
         if (mapInstanceRef.current) {
@@ -309,7 +323,16 @@ export default function MapComponent({
       } catch (err) {
         console.warn("fitBounds warning:", err);
       }
+    } else if (center && Array.isArray(center) && center.length === 2) {
+      map.setView(center, zoom || 14);
     }
+
+    // Invalidate size once markers render
+    setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 150);
   }, [cafes, userCoords]);
 
   // Handle selected cafe centering & popup open
@@ -336,8 +359,15 @@ export default function MapComponent({
   }, [selectedCafe]);
 
   return (
-    <div className={`relative rounded-3xl overflow-hidden shadow-2xl border border-dark-border ${className}`}>
-      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: "100%", width: "100%" }} />
+    <div
+      className={`relative rounded-3xl overflow-hidden shadow-2xl border border-dark-border ${className}`}
+      style={{ width: "100%", height: "100%", minHeight: "460px" }}
+    >
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full"
+        style={{ width: "100%", height: "100%", minHeight: "460px" }}
+      />
     </div>
   );
 }

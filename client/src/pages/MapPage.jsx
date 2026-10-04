@@ -21,13 +21,6 @@ import { Link } from "react-router-dom";
 import MapComponent from "../components/MapComponent";
 import { API } from "../config";
 
-const categories = [
-  { id: "all", name: "All" },
-  { id: "coffee", name: "Coffee" },
-  { id: "bakery", name: "Bakery" },
-  { id: "brunch", name: "Brunch" },
-];
-
 export default function MapPage() {
   const [cafes, setCafes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +35,33 @@ export default function MapPage() {
   const [userCoords, setUserCoords] = useState(null);
   const [mapCenter, setMapCenter] = useState([19.076, 72.8777]); // Mumbai default
   const carouselRef = useRef(null);
+
+  // Dynamically compute category filters from current cafes in dataset
+  const dynamicCategories = useMemo(() => {
+    const cuisineSet = new Set();
+    if (Array.isArray(cafes)) {
+      cafes.forEach((c) => {
+        if (c?.cuisine) {
+          const main = c.cuisine.split(",")[0].trim();
+          if (main && main !== "Coffee & Snacks") cuisineSet.add(main);
+        }
+      });
+    }
+
+    const list = [{ id: "all", name: "All Cafes" }];
+    cuisineSet.forEach((c) => {
+      list.push({ id: c.toLowerCase(), name: c });
+    });
+
+    if (list.length <= 2) {
+      list.push(
+        { id: "specialty coffee", name: "Specialty Coffee" },
+        { id: "artisan bakery", name: "Artisan Bakery" },
+        { id: "bistro & brunch", name: "Bistro & Brunch" }
+      );
+    }
+    return list;
+  }, [cafes]);
 
   useEffect(() => {
     fetchCafes();
@@ -257,12 +277,13 @@ export default function MapPage() {
           </div>
 
           {/* Category Chips */}
+          {/* Category Chips (Dynamically Generated from Real Cafes) */}
           <div className="flex gap-1.5 overflow-x-auto hide-scrollbar w-full sm:w-auto py-1">
-            {categories.map((c) => (
+            {dynamicCategories.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveCategory(c.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap border transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap border transition-all cursor-pointer ${
                   activeCategory === c.id
                     ? "bg-primary text-black border-primary font-semibold"
                     : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
@@ -277,7 +298,7 @@ export default function MapPage() {
           <div className="flex gap-1.5 overflow-x-auto hide-scrollbar w-full sm:w-auto py-1">
             <button
               onClick={() => toggleAmenity("wifi")}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
                 activeAmenities.includes("wifi")
                   ? "bg-primary text-black border-primary font-semibold"
                   : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
@@ -287,7 +308,7 @@ export default function MapPage() {
             </button>
             <button
               onClick={() => toggleAmenity("outdoor")}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
                 activeAmenities.includes("outdoor")
                   ? "bg-primary text-black border-primary font-semibold"
                   : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
@@ -297,7 +318,7 @@ export default function MapPage() {
             </button>
             <button
               onClick={() => toggleAmenity("takeaway")}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
                 activeAmenities.includes("takeaway")
                   ? "bg-primary text-black border-primary font-semibold"
                   : "bg-dark-card border-dark-border text-gray-400 hover:border-primary/30"
@@ -309,9 +330,12 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* ── Main Map View Container (Always Mounted) ── */}
+      {/* ── Main Map View Container (Always Mounted & Stable Height) ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 flex flex-col relative min-h-[500px]">
-        <div className="relative w-full flex-1 h-[62vh] sm:h-[68vh] min-h-[460px] rounded-3xl overflow-hidden border border-dark-border shadow-2xl">
+        <div 
+          className="relative w-full flex-1 h-[65vh] min-h-[480px] rounded-3xl overflow-hidden border border-dark-border shadow-2xl"
+          style={{ minHeight: "480px" }}
+        >
           {/* Leaflet Map is always mounted and responsive */}
           <MapComponent
             cafes={filteredCafes}
