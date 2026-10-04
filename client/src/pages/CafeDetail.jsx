@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Star,
@@ -14,6 +14,15 @@ import {
   Send,
   MessageSquarePlus,
   Check,
+  ExternalLink,
+  Plus,
+  UploadCloud,
+  Camera,
+  Utensils,
+  X,
+  Sparkles,
+  Maximize2,
+  CheckCircle2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { API } from "../config";
@@ -30,12 +39,115 @@ export default function CafeDetail() {
   const [activeTab, setActiveTab] = useState("menu");
   const [callStatus, setCallStatus] = useState({ show: false, message: '' });
 
+  // Crowdsourced Menu & Photo state
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [menuModalTab, setMenuModalTab] = useState("photo"); // "photo" | "dish"
+  const [newDish, setNewDish] = useState({
+    name: "",
+    price: "",
+    category: "Specialty Coffee",
+    description: "",
+    image: ""
+  });
+  const [newMenuPhoto, setNewMenuPhoto] = useState({
+    url: "",
+    caption: "",
+    preview: ""
+  });
+  const [submittingMenu, setSubmittingMenu] = useState(false);
+  const [menuSuccess, setMenuSuccess] = useState("");
+  const [selectedMenuPhoto, setSelectedMenuPhoto] = useState(null);
+
   // Interactive review submission state
   const { user } = useAuth();
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  const handleOfficialMenuClick = () => {
+    if (cafe?.menuUrl && cafe.menuUrl.startsWith("http")) {
+      window.open(cafe.menuUrl, "_blank");
+    } else {
+      const query = `${cafe?.name || "cafe"} ${cafe?.address && cafe.address !== "Address not available" ? cafe.address : "Mumbai"} menu`;
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      window.open(searchUrl, "_blank");
+    }
+  };
+
+  const handlePhotoFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setNewMenuPhoto(prev => ({
+        ...prev,
+        url: reader.result,
+        preview: reader.result
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleMenuSubmit = async (e) => {
+    e.preventDefault();
+    setSubmittingMenu(true);
+    setMenuSuccess("");
+    try {
+      let payload = {};
+      if (menuModalTab === "photo") {
+        if (!newMenuPhoto.url) return;
+        payload = {
+          type: "photo",
+          photo: {
+            url: newMenuPhoto.url,
+            caption: newMenuPhoto.caption || "Crowdsourced menu photo",
+            uploadedBy: user?.name || "Foodie Contributor"
+          }
+        };
+      } else {
+        if (!newDish.name || !newDish.price) return;
+        payload = {
+          type: "dish",
+          item: {
+            ...newDish,
+            price: Number(newDish.price),
+            addedBy: user?.name || "Foodie Contributor"
+          }
+        };
+      }
+
+      const res = await fetch(`${API}/api/cafes/${id}/menu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCafe(data.cafe);
+        setMenuSuccess(
+          menuModalTab === "photo" 
+            ? "Menu photo published to community!" 
+            : `Added "${newDish.name}" to menu!`
+        );
+        setTimeout(() => {
+          setMenuSuccess("");
+          setShowMenuModal(false);
+          setNewDish({ name: "", price: "", category: "Specialty Coffee", description: "", image: "" });
+          setNewMenuPhoto({ url: "", caption: "", preview: "" });
+        }, 1500);
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Failed to update menu");
+      }
+    } catch (err) {
+      console.error("Error submitting menu contribution:", err);
+      alert("Error saving menu item to database");
+    } finally {
+      setSubmittingMenu(false);
+    }
+  };
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();
@@ -412,8 +524,88 @@ export default function CafeDetail() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="mb-8"
+            className="mb-8 space-y-5"
           >
+            {/* Menu Header & Action Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-dark-card border border-dark-border">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Utensils className="w-4 h-4 text-primary" />
+                  <h3 className="text-base font-bold text-white">Menu & Offerings</h3>
+                  <span className="text-xs bg-white/10 text-primary px-2 py-0.5 rounded-full font-semibold">
+                    {cafe.menu?.length || 0} items
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Artisanal roasts, bakeries & community crowdsourced picks
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleOfficialMenuClick}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-primary/40 hover:bg-white/10 text-xs font-semibold text-white transition-all cursor-pointer"
+                  title="Open Official Menu or Search online"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-primary" />
+                  <span>Official Menu</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowMenuModal(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-black text-xs font-bold hover:bg-primary-light transition-all shadow-md cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Dish / Photo</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Crowdsourced Menu Photo Gallery */}
+            {cafe.menuPhotos && cafe.menuPhotos.length > 0 && (
+              <div className="p-4 rounded-2xl bg-dark-card border border-dark-border">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-primary" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-300">
+                      Community Menu Boards ({cafe.menuPhotos.length})
+                    </h4>
+                  </div>
+                  <span className="text-[11px] text-gray-500">Tap to expand full screen</span>
+                </div>
+                
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {cafe.menuPhotos.map((photo, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedMenuPhoto(photo)}
+                      className="relative shrink-0 w-36 h-48 rounded-xl overflow-hidden border border-white/10 cursor-pointer group hover:border-primary transition-all"
+                    >
+                      <img
+                        src={photo.url}
+                        alt={photo.caption || "Menu"}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/20 flex flex-col justify-end p-2.5">
+                        <span className="text-[11px] font-semibold text-white truncate drop-shadow">
+                          {photo.caption || "Menu Board"}
+                        </span>
+                        <span className="text-[9px] text-gray-400">
+                          by {photo.uploadedBy || "Foodie"}
+                        </span>
+                      </div>
+                      <div className="absolute top-2 right-2 p-1 rounded-md bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 className="w-3 h-3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Menu Items List */}
             {cafe.menu && cafe.menu.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {cafe.menu.map((item, i) => (
@@ -421,9 +613,14 @@ export default function CafeDetail() {
                     key={i}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: i * 0.05 }}
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-dark-card border border-dark-border hover:border-primary/30 transition-all group"
+                    transition={{ duration: 0.3, delay: i * 0.04 }}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-dark-card border border-dark-border hover:border-primary/30 transition-all group relative overflow-hidden"
                   >
+                    {item.isCommunityAdded && (
+                      <span className="absolute top-0 right-0 bg-primary/20 text-primary border-b border-l border-primary/30 text-[9px] font-semibold px-2 py-0.5 rounded-bl-lg flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5" /> Community Pick
+                      </span>
+                    )}
                     <img
                       src={item.image || "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg"}
                       alt={item.name}
@@ -433,17 +630,19 @@ export default function CafeDetail() {
                       }}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 pr-12">
                         <h4 className="font-semibold text-white text-sm truncate">{item.name}</h4>
-                        <span className="text-primary font-bold text-sm shrink-0">
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-primary font-bold text-sm">
                           ₹{item.price || 180}
                         </span>
+                        {item.category && (
+                          <span className="text-[10px] text-gray-400 bg-white/5 px-2 py-0.5 rounded-md">
+                            {item.category}
+                          </span>
+                        )}
                       </div>
-                      {item.category && (
-                        <span className="inline-block text-[10px] text-gray-400 bg-white/5 px-2 py-0.5 rounded-md mt-1">
-                          {item.category}
-                        </span>
-                      )}
                       {item.description && (
                         <p className="text-xs text-gray-400 line-clamp-1 mt-1">
                           {item.description}
@@ -454,7 +653,16 @@ export default function CafeDetail() {
                 ))}
               </div>
             ) : (
-              <p className="text-center text-gray-500 py-8">Menu details being updated</p>
+              <div className="text-center p-8 rounded-2xl bg-dark-card border border-dashed border-dark-border">
+                <p className="text-gray-400 text-sm mb-3">No dishes listed yet for this cafe.</p>
+                <button
+                  type="button"
+                  onClick={() => setShowMenuModal(true)}
+                  className="px-4 py-2 rounded-xl bg-primary text-black font-semibold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Be the first to add a dish or menu photo
+                </button>
+              </div>
             )}
           </motion.div>
         )}
@@ -633,7 +841,284 @@ export default function CafeDetail() {
             </motion.button>
           </div>
         </motion.div>
+
+        {/* Community Menu Contribution Modal */}
+        <AnimatePresence>
+          {showMenuModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-lg bg-dark-card border border-dark-border rounded-3xl p-6 shadow-2xl overflow-hidden relative max-h-[90vh] flex flex-col"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-primary" />
+                      Contribute to Café Menu
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Upload a physical menu photo or add a specific dish/drink
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowMenuModal(false)}
+                    className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Modal Tabs */}
+                <div className="flex gap-2 p-1 bg-dark-surface rounded-xl my-4">
+                  <button
+                    type="button"
+                    onClick={() => setMenuModalTab("photo")}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      menuModalTab === "photo"
+                        ? "bg-primary text-black shadow"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    Upload Menu Photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenuModalTab("dish")}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      menuModalTab === "dish"
+                        ? "bg-primary text-black shadow"
+                        : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    <Utensils className="w-3.5 h-3.5" />
+                    Add a Dish / Drink
+                  </button>
+                </div>
+
+                {/* Success message banner */}
+                {menuSuccess && (
+                  <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{menuSuccess}</span>
+                  </div>
+                )}
+
+                {/* Content Body */}
+                <div className="flex-1 overflow-y-auto pr-1">
+                  <form onSubmit={handleMenuSubmit} className="space-y-4">
+                    {menuModalTab === "photo" ? (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-gray-300">
+                            Menu Photo (Board, Brochure, or Counter List)
+                          </label>
+                          
+                          {/* File Upload Box */}
+                          <label className="border-2 border-dashed border-dark-border hover:border-primary/50 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer bg-dark-surface/50 transition-colors">
+                            {newMenuPhoto.preview ? (
+                              <div className="relative w-full h-40 rounded-xl overflow-hidden">
+                                <img
+                                  src={newMenuPhoto.preview}
+                                  alt="Menu Preview"
+                                  className="w-full h-full object-contain bg-black/40"
+                                />
+                                <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded-md">
+                                  Click to Change
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                  <UploadCloud className="w-5 h-5" />
+                                </div>
+                                <p className="text-xs text-white font-medium">Click to select photo from device</p>
+                                <p className="text-[10px] text-gray-500">Supports JPG, PNG, WebP (Max 10MB)</p>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handlePhotoFileChange}
+                              className="hidden"
+                            />
+                          </label>
+
+                          <div className="text-center">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">or paste image URL</span>
+                          </div>
+                          <input
+                            type="url"
+                            value={newMenuPhoto.url && !newMenuPhoto.url.startsWith("data:") ? newMenuPhoto.url : ""}
+                            onChange={(e) => {
+                              setNewMenuPhoto(prev => ({
+                                ...prev,
+                                url: e.target.value,
+                                preview: e.target.value
+                              }));
+                            }}
+                            placeholder="https://example.com/menu-photo.jpg"
+                            className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-300">
+                            Caption / Section Name
+                          </label>
+                          <input
+                            type="text"
+                            value={newMenuPhoto.caption}
+                            onChange={(e) => setNewMenuPhoto(prev => ({ ...prev, caption: e.target.value }))}
+                            placeholder="e.g. Main Beverage & Coffee Menu, Desserts Board"
+                            className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-300">Dish / Drink Name *</label>
+                          <input
+                            type="text"
+                            required
+                            value={newDish.name}
+                            onChange={(e) => setNewDish(prev => ({ ...prev, name: e.target.value }))}
+                            placeholder="e.g. Spanish Latte, Truffle Scrambled Eggs"
+                            className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-300">Price (₹) *</label>
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              value={newDish.price}
+                              onChange={(e) => setNewDish(prev => ({ ...prev, price: e.target.value }))}
+                              placeholder="e.g. 220"
+                              className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-300">Category</label>
+                            <select
+                              value={newDish.category}
+                              onChange={(e) => setNewDish(prev => ({ ...prev, category: e.target.value }))}
+                              className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-primary"
+                            >
+                              <option value="Specialty Coffee">Specialty Coffee</option>
+                              <option value="Manual Brews">Manual Brews</option>
+                              <option value="Tea & Beverages">Tea & Beverages</option>
+                              <option value="Bakery & Desserts">Bakery & Desserts</option>
+                              <option value="Gourmet Bites">Gourmet Bites</option>
+                              <option value="Breakfast & Brunch">Breakfast & Brunch</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-300">Description / Highlights</label>
+                          <input
+                            type="text"
+                            value={newDish.description}
+                            onChange={(e) => setNewDish(prev => ({ ...prev, description: e.target.value }))}
+                            placeholder="e.g. Double shot espresso with sweetened condensed milk"
+                            className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-300">Photo URL (Optional)</label>
+                          <input
+                            type="url"
+                            value={newDish.image}
+                            onChange={(e) => setNewDish(prev => ({ ...prev, image: e.target.value }))}
+                            placeholder="https://images.pexels.com/..."
+                            className="w-full bg-dark-surface border border-dark-border rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">
+                        Posting as {user?.name || "Anonymous Foodie"}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowMenuModal(false)}
+                          className="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submittingMenu || (menuModalTab === "photo" && !newMenuPhoto.url) || (menuModalTab === "dish" && (!newDish.name || !newDish.price))}
+                          className="px-5 py-2 rounded-xl bg-primary text-black font-bold text-xs hover:bg-primary-light transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {submittingMenu ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              {menuModalTab === "photo" ? "Upload Photo" : "Add Dish"}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Fullscreen Photo Lightbox Modal */}
+        <AnimatePresence>
+          {selectedMenuPhoto && (
+            <div 
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md cursor-pointer"
+              onClick={() => setSelectedMenuPhoto(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="relative max-w-3xl max-h-[90vh] flex flex-col items-center cursor-default"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedMenuPhoto(null)}
+                  className="absolute -top-10 right-0 p-1.5 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <img
+                  src={selectedMenuPhoto.url}
+                  alt={selectedMenuPhoto.caption || "Full Menu Board"}
+                  className="max-h-[80vh] w-auto rounded-2xl object-contain shadow-2xl border border-white/10"
+                />
+                <div className="mt-3 text-center">
+                  <p className="text-sm font-semibold text-white">{selectedMenuPhoto.caption || "Menu Photo"}</p>
+                  <p className="text-xs text-gray-400">Uploaded by {selectedMenuPhoto.uploadedBy || "Community Contributor"}</p>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
-}
+}

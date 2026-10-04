@@ -14,7 +14,8 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Atlas Connected"))
@@ -51,6 +52,7 @@ const cafeSchema = new mongoose.Schema({
   address: String,
   phone: String,
   website: String,
+  menuUrl: String,
   openingHours: String,
   cuisine: String,
   wheelchair: String,
@@ -58,6 +60,12 @@ const cafeSchema = new mongoose.Schema({
   wifi: Boolean,
   photo: String,
   photos: [String],
+  menuPhotos: [{
+    url: String,
+    caption: String,
+    uploadedBy: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
   description: String,
   tags: [String],
   rating: { type: Number, default: 4.5 },
@@ -67,7 +75,9 @@ const cafeSchema = new mongoose.Schema({
     price: Number,
     category: String,
     description: String,
-    image: String
+    image: String,
+    isCommunityAdded: { type: Boolean, default: false },
+    addedBy: String
   }],
   reviews: [{
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -592,6 +602,7 @@ function formatCafeData(osmElement, index) {
       : tags["addr:city"] || "Address not available",
     phone: tags.phone || tags["contact:phone"] || "Not available",
     website: tags.website || tags["contact:website"] || "",
+    menuUrl: tags.menu || tags["contact:menu"] || tags.website || tags["contact:website"] || "",
     openingHours: tags.opening_hours || "Hours vary",
     cuisine: cuisineType,
     wheelchair: tags.wheelchair || "unknown",
@@ -604,6 +615,7 @@ function formatCafeData(osmElement, index) {
       pexelsImages[(index * 4) % pexelsImages.length],
       pexelsImages[(index * 5) % pexelsImages.length],
     ],
+    menuPhotos: [],
     description: descriptions[index % descriptions.length],
     tags: amenityTags,
     rating: avgRating,
@@ -734,6 +746,14 @@ app.get("/api/cafes/:id", async (req, res) => {
       cafe.reviewCount = cafe.reviews.length + 15;
       needsSave = true;
     }
+    if (!cafe.menuPhotos) {
+      cafe.menuPhotos = [];
+      needsSave = true;
+    }
+    if (!cafe.menuUrl && cafe.website) {
+      cafe.menuUrl = cafe.website;
+      needsSave = true;
+    }
 
     if (needsSave) {
       await cafe.save();
@@ -779,6 +799,87 @@ app.post("/api/cafes/:id/reviews", async (req, res) => {
     }
 
     res.json({ message: "Review posted successfully", cafe });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ==============================
+   Crowdsourced Menu & Menu Photo Upload
+   (Similar to Google Maps "Add Menu Photo / Dish")
+============================== */
+app.post("/api/cafes/:id/menu", async (req, res) => {
+  try {
+    const { type, item, photo } = req.body;
+    const cafe = await Cafe.findById(req.params.id);
+    if (!cafe) return res.status(404).json({ error: "Cafe not found" });
+
+    if (type === "photo") {
+      const photoPayload = photo || req.body;
+      if (!photoPayload.url) {
+        return res.status(400).json({ error: "Photo URL or image data is required" });
+      }
+
+      const newMenuPhoto = {
+        url: photoPayload.url,
+        caption: photoPayload.caption?.trim() || "Menu photo",
+        uploadedBy: photoPayload.uploadedBy?.trim() || "Community Contributor",
+        createdAt: new Date()
+      };
+
+      if (!Array.isArray(cafe.menuPhotos)) cafe.menuPhotos = [];
+      cafe.menuPhotos.unshift(newMenuPhoto);
+
+      // Also append to cafe general photos gallery
+      if (Array.isArray(cafe.photos)) {
+        cafe.photos.unshift(photoPayload.url);
+      }
+
+      await cafe.save();
+      return res.json({ message: "Menu photo uploaded successfully", cafe });
+    }
+
+    // Default: Add a dish / drink
+    const dish = item || req.body;
+    if (!dish.name || !dish.price) {
+      return res.status(400).json({ error: "Dish name and price are required" });
+    }
+
+    const newItem = {
+      name: dish.name.trim(),
+      price: Math.max(1, Number(dish.price)),
+      category: dish.category?.trim() || "Specialty Coffee",
+      description: dish.description?.trim() || "Community recommended item",
+      image: dish.image?.trim() || "https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg",
+      isCommunityAdded: true,
+      addedBy: dish.addedBy?.trim() || "Community Contributor"
+    };
+
+    if (!Array.isArray(cafe.menu)) cafe.menu = [];
+    cafe.menu.unshift(newItem);
+    await cafe.save();
+
+    res.json({ message: "Dish added to menu successfully", cafe });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ==============================
+   Update Official Menu URL
+============================== */
+app.patch("/api/cafes/:id/menu-url", async (req, res) => {
+  try {
+    const { menuUrl } = req.body;
+    if (!menuUrl) return res.status(400).json({ error: "menuUrl is required" });
+
+    const cafe = await Cafe.findById(req.params.id);
+    if (!cafe) return res.status(404).json({ error: "Cafe not found" });
+
+    cafe.menuUrl = menuUrl.trim();
+    await cafe.save();
+
+    res.json({ message: "Official menu link updated successfully", cafe });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
